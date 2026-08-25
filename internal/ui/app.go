@@ -57,6 +57,7 @@ func NewApp(client *api.Client, loggedIn bool, favorites []string) *App {
 	a.reader.st = a.state
 	a.search.st = a.state
 	a.login.onSuccess = a.onLoginSuccess
+	a.login.onLogout = a.logout
 
 	// 跟随 NGA 轮换会话 cookie（Set-Cookie），变化时持久化到本地
 	client.SetOnCookiesChanged(func() {
@@ -138,13 +139,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					a.screen = ScreenHelp
 				}
 			case keyMatches(k, km.Login):
-				if a.state.LoggedIn {
-					a.logout()
-				} else {
-					a.screen = ScreenLogin
-					a.login.client = a.state.Client
-					cmds = append(cmds, a.login.reset())
-				}
+				// 始终进入登录视图（视图内可登出/重新登录），避免误触静默登出
+				a.screen = ScreenLogin
+				a.login.client = a.state.Client
+				cmds = append(cmds, a.login.reset())
 			case a.screen == ScreenForum && keyMatches(k, km.Back):
 				cmds = append(cmds, tea.Quit)
 			default:

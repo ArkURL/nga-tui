@@ -3,6 +3,8 @@ package api
 import (
 	"net/url"
 	"strings"
+
+	"github.com/ArkURL/nga-tui/internal/debug"
 )
 
 // Session 表示登录状态。
@@ -22,13 +24,17 @@ func (c *Client) CheckLogin() (bool, error) {
 
 	body, err := c.Get("/thread.php", params)
 	if err != nil {
+		debug.Logf("CheckLogin 请求失败: %v", err)
 		return false, err
 	}
 	if _, err := parseRoot(body); err != nil {
 		if ae, ok := err.(*APIError); ok && strings.Contains(ae.Code, "2048") {
+			debug.Logf("CheckLogin: 会话未登录（2048），当前 cookie=%d 个", len(c.Cookies()))
 			return false, nil // 明确未登录
 		}
+		debug.Logf("CheckLogin 解析异常: %v", err)
 		return false, err
 	}
+	debug.Logf("CheckLogin: 会话有效")
 	return true, nil
 }

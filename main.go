@@ -4,12 +4,12 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/ArkURL/nga-tui/internal/api"
 	"github.com/ArkURL/nga-tui/internal/config"
+	"github.com/ArkURL/nga-tui/internal/debug"
 	"github.com/ArkURL/nga-tui/internal/ui"
 )
 
@@ -27,13 +27,15 @@ func main() {
 		switch {
 		case err != nil:
 			// 网络异常无法确认：乐观保留登录态（请求实际失败时会降级提示）
+			debug.Logf("启动: 登录检查失败（网络），乐观视为已登录: %v", err)
 			loggedIn = true
 		case ok:
 			loggedIn = true
 		default:
-			// 诊断信息：cookie 存在但会话验证为未登录
-			fmt.Fprintf(os.Stderr, "[nga-tui] 检测到保存的登录 Cookie 但会话已失效（可能是过期或被拒绝），按 L 可重新登录\n")
+			debug.Logf("启动: 检测到 %d 个已保存 cookie 但会话失效（2048）", len(cfg.Cookies))
 		}
+	} else {
+		debug.Logf("启动: 无已保存 cookie")
 	}
 
 	app := ui.NewApp(client, loggedIn, cfg.Favorites)

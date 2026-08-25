@@ -31,6 +31,8 @@ type loginModel struct {
 	err       error
 	// onSuccess 登录成功后的回调（App 注入：设置 cookie + 保存配置）。
 	onSuccess func(*api.Session)
+	// onLogout 登出回调（App 注入）。
+	onLogout func()
 }
 
 type loginResultMsg struct {
@@ -107,6 +109,12 @@ func (m loginModel) updateChoice(msg tea.KeyMsg) (loginModel, tea.Cmd) {
 		m.mode = loginManual
 		m.err = nil
 		return m, m.manual.Focus()
+	case "X", "x":
+		if m.client != nil && m.client.LoggedIn() && m.onLogout != nil {
+			m.onLogout()
+			m.err = nil
+		}
+		return m, nil
 	}
 	return m, nil
 }
@@ -183,15 +191,23 @@ func (m loginModel) View() string {
 
 	switch m.mode {
 	case loginChoice:
-		sb.WriteString("  " + dimStyle.Render("NGA 网页登录需要验证码，无法在终端内完成，请选择：") + "\n\n")
-		sb.WriteString("  " + titleStyle.Render("B") + "  浏览器登录（推荐）\n")
-		sb.WriteString("      " + dimStyle.Render("打开独立 Chrome 窗口，登录后自动抓取并保存 Cookie") + "\n\n")
-		sb.WriteString("  " + titleStyle.Render("M") + "  手动粘贴 Cookie\n")
-		sb.WriteString("      " + dimStyle.Render("从浏览器开发者工具复制 ngaPassportUid/ngaPassportCid 粘贴") + "\n\n")
+		if m.client != nil && m.client.LoggedIn() {
+			sb.WriteString("  " + okStyle.Render("当前已登录") + "\n\n")
+			sb.WriteString("  " + dimStyle.Render("如需切换账号，请选择重新登录：") + "\n\n")
+			sb.WriteString("  " + titleStyle.Render("B") + "  重新登录（推荐）\n")
+			sb.WriteString("      " + dimStyle.Render("打开独立 Chrome 窗口，登录后自动抓取并保存 Cookie") + "\n\n")
+			sb.WriteString("  " + titleStyle.Render("X") + "  登出\n\n")
+		} else {
+			sb.WriteString("  " + dimStyle.Render("NGA 网页登录需要验证码，无法在终端内完成，请选择：") + "\n\n")
+			sb.WriteString("  " + titleStyle.Render("B") + "  浏览器登录（推荐）\n")
+			sb.WriteString("      " + dimStyle.Render("打开独立 Chrome 窗口，登录后自动抓取并保存 Cookie") + "\n\n")
+			sb.WriteString("  " + titleStyle.Render("M") + "  手动粘贴 Cookie\n")
+			sb.WriteString("      " + dimStyle.Render("从浏览器开发者工具复制 ngaPassportUid/ngaPassportCid 粘贴") + "\n\n")
+		}
 		if m.err != nil {
 			sb.WriteString("  " + errorStyle.Render(m.err.Error()) + "\n\n")
 		}
-		sb.WriteString("  " + dimStyle.Render("B / M 选择 · Esc 返回") + "\n")
+		sb.WriteString("  " + dimStyle.Render("B / M / X 选择 · Esc 返回") + "\n")
 
 	case loginBrowser:
 		sb.WriteString("  " + m.sp.View() + " 正在打开浏览器…\n\n")

@@ -146,14 +146,26 @@ func TestAppLoginLogout(t *testing.T) {
 		t.Fatal("客户端应带上 cookie")
 	}
 
-	// 返回版面后再按 L 登出
+	// 返回版面
 	dispatch(app, t, esc())
 	if app.screen != ScreenForum {
 		t.Fatalf("Esc 应返回版面，得到 %v", app.screen)
 	}
+
+	// 再按 L 进入登录视图（不再静默登出），按 X 登出
 	dispatch(app, t, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'L'}})
+	if app.screen != ScreenLogin {
+		t.Fatalf("L 应进入登录视图，得到 %v", app.screen)
+	}
+	if !app.state.LoggedIn {
+		t.Fatal("L 不应直接登出，应保持登录")
+	}
+	dispatch(app, t, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'X'}})
 	if app.state.LoggedIn {
-		t.Fatal("登出后 LoggedIn 应为 false")
+		t.Fatal("登录视图按 X 后 LoggedIn 应为 false")
+	}
+	if app.state.Client.LoggedIn() {
+		t.Fatal("登出后客户端不应有 cookie")
 	}
 }
 

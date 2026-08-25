@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ArkURL/nga-tui/internal/debug"
 )
 
 // 默认 User-Agent。NGA 对非移动端 UA 会返回反爬 error 15（访客不能直接访问），
@@ -84,7 +86,8 @@ func (c *Client) SetOnCookiesChanged(fn func()) {
 
 // mergeResponseCookies 跟随服务端 Set-Cookie 更新会话 cookie。
 // NGA 可能轮换 passport token，若不更新会因旧 token 失效导致会话丢失。
-// 返回会话 cookie 是否有变化。
+// 注意：只在拿到非空的会话 cookie 值时更新，绝不因"清空"指令删除，
+// 避免错误响应误清已保存的会话。返回会话 cookie 是否有变化。
 func (c *Client) mergeResponseCookies(h http.Header) bool {
 	if len(h) == 0 {
 		return false
@@ -102,10 +105,7 @@ func (c *Client) mergeResponseCookies(h http.Header) bool {
 			continue
 		}
 		if value == "" {
-			if _, existed := c.cookies[name]; existed {
-				delete(c.cookies, name)
-				changed = true
-			}
+			// 空值（可能为删除指令）：不处理，保护现有会话
 			continue
 		}
 		if c.cookies[name] != value {
@@ -183,6 +183,7 @@ func (c *Client) doHost(method, host, path string, params url.Values, body io.Re
 	}
 	// 跟随服务端轮换的会话 cookie，并通知持久化
 	if c.mergeResponseCookies(resp.Header) {
+		debug.Logf("会话 cookie 更新（跟随 Set-Cookie）")
 		c.mu.Lock()
 		fn := c.onCookiesChanged
 		c.mu.Unlock()

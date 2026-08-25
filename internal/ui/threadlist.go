@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/ArkURL/nga-tui/internal/api"
+	"github.com/ArkURL/nga-tui/internal/debug"
 )
 
 type listState int
@@ -89,6 +90,7 @@ func (m threadListModel) Update(msg tea.Msg) (threadListModel, tea.Cmd) {
 			m.err = msg.err
 			if isLoginError(msg.err) && m.st != nil {
 				m.st.LoggedIn = false
+				debug.Logf("帖子列表加载被拒（登录失效）: %v", msg.err)
 			}
 			return m, nil
 		}

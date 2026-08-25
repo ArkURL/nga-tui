@@ -10,6 +10,7 @@ import (
 
 	"github.com/ArkURL/nga-tui/internal/api"
 	"github.com/ArkURL/nga-tui/internal/bbcode"
+	"github.com/ArkURL/nga-tui/internal/debug"
 )
 
 type readerState int
@@ -85,6 +86,7 @@ func (m readerModel) Update(msg tea.Msg) (readerModel, tea.Cmd) {
 			m.err = msg.err
 			if isLoginError(msg.err) && m.st != nil {
 				m.st.LoggedIn = false
+				debug.Logf("帖子内容加载被拒（登录失效）: %v", msg.err)
 			}
 			return m, nil
 		}
