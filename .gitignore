@@ -1,0 +1,13 @@
+# 编译产物
+/nga-tui
+nga-tui.exe
+*.test
+*.out
+
+# 编辑器 / 系统
+.idea/
+.vscode/
+.DS_Store
+
+# 本地配置（含登录 Cookie，勿提交）
+config.json
