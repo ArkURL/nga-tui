@@ -14,14 +14,15 @@ func (c *Client) GetCategories() ([]model.Category, error) {
 	params.Set("__act", "category")
 	params.Set("__output", "11")
 
-	body, err := c.Get("/app_api.php", params)
+	var cats []model.Category
+	err := c.fetchJSON("/app_api.php", params, func(body []byte) error {
+		if err := decodeResponse(body, &cats); err != nil {
+			return fmt.Errorf("解析版面分类: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
-	}
-
-	var cats []model.Category
-	if err := decodeResponse(body, &cats); err != nil {
-		return nil, fmt.Errorf("解析版面分类: %w", err)
 	}
 	return cats, nil
 }

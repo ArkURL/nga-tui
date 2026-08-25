@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -140,5 +141,43 @@ func TestIsLoginError(t *testing.T) {
 	}
 	if isLoginError(nil) {
 		t.Fatal("nil 不应是登录错误")
+	}
+}
+
+func TestReaderScrollWithJK(t *testing.T) {
+	m := newReaderModel()
+	m.st = newTestState()
+	m.state = readerReady
+	// 长内容撑满视口，保证可滚动
+	m.st.Replies = []model.Reply{
+		{PID: 0, Lou: 0, Content: strings.Repeat("这是很长的楼层内容用于测试滚动效果。", 30)},
+		{PID: 1, Lou: 1, Content: strings.Repeat("第二层也很长，确保内容超出视口高度。", 30)},
+	}
+	m.width = 80
+	m.vp.Width = 80
+	m.vp.Height = 5
+	m.syncViewport()
+
+	start := m.vp.YOffset
+	// j 向下滚动
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if m.vp.YOffset <= start {
+		t.Fatalf("j 应向下滚动，offset=%d start=%d", m.vp.YOffset, start)
+	}
+	// G 滚到底部
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	if !m.vp.AtBottom() {
+		t.Fatalf("G 应滚到底部，offset=%d", m.vp.YOffset)
+	}
+	// k 向上滚动
+	before := m.vp.YOffset
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	if m.vp.YOffset >= before {
+		t.Fatalf("k 应向上滚动，offset=%d before=%d", m.vp.YOffset, before)
+	}
+	// g 回到顶部
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	if !m.vp.AtTop() {
+		t.Fatalf("g 应回到顶部，offset=%d", m.vp.YOffset)
 	}
 }

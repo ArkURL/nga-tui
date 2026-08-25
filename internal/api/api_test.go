@@ -166,3 +166,29 @@ func TestClientFollowsSetCookieEndToEnd(t *testing.T) {
 		t.Fatalf("第二次请求应带轮换后的 token: %v", seen[1])
 	}
 }
+
+func TestEscapeControlCharsStrayBackslash(t *testing.T) {
+	// 孤立反斜杠 \u 后跟非十六进制（非法转义）应被修复为字面量
+	in := []byte(`{"content":"路径 C:\u 前面 和 文本"}`)
+	out := escapeControlChars(in)
+	var m map[string]string
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatalf("解析失败: %v\n输出: %q", err, out)
+	}
+	if !strings.Contains(m["content"], `\u`) {
+		t.Fatalf("应保留字面量 \\u: %q", m["content"])
+	}
+}
+
+func TestEscapeControlCharsValidUnicode(t *testing.T) {
+	// 合法 \uXXXX 转义必须原样保留
+	in := []byte(`{"content":"\u4e2d\u6587\\n测试"}`)
+	out := escapeControlChars(in)
+	var m map[string]string
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatalf("解析失败: %v\n输出: %q", err, out)
+	}
+	if m["content"] != "中文\\n测试" {
+		t.Fatalf("内容不对: %q", m["content"])
+	}
+}

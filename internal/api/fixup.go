@@ -21,19 +21,26 @@ func fixJSON(data []byte) []byte {
 	return data
 }
 
-// escapeControlChars 把字符串值内的控制字符（< 0x20）改写为合法转义序列。
+// escapeControlChars 把字符串值内的控制字符（< 0x20）改写为合法转义序列，
+// 并修复孤立反斜杠（后面不是合法转义的 `\` 转义为 `\\`，避免解析失败）。
 func escapeControlChars(data []byte) []byte {
 	var buf bytes.Buffer
 	inStr, escaped := false, false
-	for _, c := range data {
+	for i := 0; i < len(data); i++ {
+		c := data[i]
 		if inStr {
 			switch {
 			case escaped:
 				buf.WriteByte(c)
 				escaped = false
 			case c == '\\':
-				buf.WriteByte(c)
-				escaped = true
+				if isValidJSONEscape(data, i) {
+					buf.WriteByte(c)
+					escaped = true
+				} else {
+					// 孤立反斜杠：转义自身，后续字符按字面量处理
+					buf.WriteString(`\\`)
+				}
 			case c == '"':
 				buf.WriteByte(c)
 				inStr = false
@@ -63,6 +70,33 @@ func escapeControlChars(data []byte) []byte {
 		buf.WriteByte(c)
 	}
 	return buf.Bytes()
+}
+
+// isValidJSONEscape 判断 data[i]（反斜杠）是否为合法的 JSON 转义开头。
+func isValidJSONEscape(data []byte, i int) bool {
+	if i+1 >= len(data) {
+		return false
+	}
+	switch data[i+1] {
+	case '"', '\\', '/', 'b', 'f', 'n', 'r', 't':
+		return true
+	case 'u':
+		// 需要 4 个十六进制位
+		if i+6 > len(data) {
+			return false
+		}
+		for j := i + 2; j < i+6; j++ {
+			if !isHex(data[j]) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+func isHex(c byte) bool {
+	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
 }
 
 // quoteNumberKeys 给对象中裸数字 key 补引号：{ 或 , 之后，空白 + 数字串 + 空白 + : 的形式。

@@ -37,10 +37,12 @@ type contentLoadedMsg struct {
 }
 
 func newReaderModel() readerModel {
+	vp := viewport.New(0, 0)
+	vp.MouseWheelEnabled = true
 	return readerModel{
 		state: readerLoading,
 		sp:    spinner.New(spinner.WithSpinner(spinner.Dot)),
-		vp:    viewport.New(0, 0),
+		vp:    vp,
 	}
 }
 
@@ -100,6 +102,14 @@ func (m readerModel) Update(msg tea.Msg) (readerModel, tea.Cmd) {
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
+
+	case tea.MouseMsg:
+		// 支持鼠标滚轮滚动楼层
+		if m.state == readerReady {
+			var cmd tea.Cmd
+			m.vp, cmd = m.vp.Update(msg)
+			return m, cmd
+		}
 	}
 	return m, nil
 }
@@ -108,6 +118,16 @@ func (m readerModel) handleKey(msg tea.KeyMsg) (readerModel, tea.Cmd) {
 	switch {
 	case keyMatches(msg, km.Back):
 		return m, navCmd(ScreenThreadList, nil)
+	case keyMatches(msg, km.Up):
+		// k/↑：向上滚动一行
+		m.vp.LineUp(1)
+	case keyMatches(msg, km.Down):
+		// j/↓：向下滚动一行
+		m.vp.LineDown(1)
+	case keyMatches(msg, km.Top):
+		m.vp.GotoTop()
+	case keyMatches(msg, km.Bottom):
+		m.vp.GotoBottom()
 	case keyMatches(msg, km.NextPg):
 		return m.gotoPage(m.st.ReadPage + 1)
 	case keyMatches(msg, km.PrevPg):

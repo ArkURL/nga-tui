@@ -135,6 +135,32 @@ func (c *Client) Get(path string, params url.Values) ([]byte, error) {
 	return body, err
 }
 
+// fetchJSON 获取并解析响应；解析失败（如 NGA 响应被截断）时退避重试。
+// APIError/HTTPError 等确定性错误不重试。
+func (c *Client) fetchJSON(path string, params url.Values, parse func(body []byte) error) error {
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		body, err := c.Get(path, params)
+		if err != nil {
+			return err
+		}
+		if err := parse(body); err != nil {
+			if _, ok := err.(*APIError); ok {
+				return err
+			}
+			if _, ok := err.(*HTTPError); ok {
+				return err
+			}
+			debug.Logf("解析响应失败（第 %d 次）: %v", attempt+1, err)
+			lastErr = err
+			time.Sleep(time.Duration(attempt+1) * 500 * time.Millisecond)
+			continue
+		}
+		return nil
+	}
+	return fmt.Errorf("多次尝试后解析仍失败: %w", lastErr)
+}
+
 func (c *Client) doHost(method, host, path string, params url.Values, body io.Reader) ([]byte, http.Header, error) {
 	full := host + path
 	if params != nil && len(params) > 0 {

@@ -38,32 +38,29 @@ func (c *Client) GetThreads(fid string, page int, orderBy, keyword string) (*Thr
 	}
 	params.Set("__output", "11")
 
-	body, err := c.Get("/thread.php", params)
-	if err != nil {
-		return nil, err
-	}
-
-	data, err := parseData(body)
-	if err != nil {
-		return nil, err
-	}
-
-	res := &ThreadListResult{
-		Page:    intFromRaw(data["__PAGE"]),
-		OrderBy: orderBy,
-	}
-	if res.Page == 0 {
-		res.Page = page
-	}
-	if rows := intFromRaw(data["__ROWS"]); rows > 0 {
-		res.Pages = (rows + PageSize - 1) / PageSize
-	}
-
-	// __T 是数组（保持服务端顺序，置顶帖在前）
-	if rawT, ok := data["__T"]; ok {
-		if err := json.Unmarshal(rawT, &res.Threads); err != nil {
-			return nil, fmt.Errorf("解析帖子列表 __T: %w", err)
+	res := &ThreadListResult{OrderBy: orderBy}
+	err := c.fetchJSON("/thread.php", params, func(body []byte) error {
+		data, err := parseData(body)
+		if err != nil {
+			return err
 		}
+		res.Page = intFromRaw(data["__PAGE"])
+		if res.Page == 0 {
+			res.Page = page
+		}
+		if rows := intFromRaw(data["__ROWS"]); rows > 0 {
+			res.Pages = (rows + PageSize - 1) / PageSize
+		}
+		// __T 是数组（保持服务端顺序，置顶帖在前）
+		if rawT, ok := data["__T"]; ok {
+			if err := json.Unmarshal(rawT, &res.Threads); err != nil {
+				return fmt.Errorf("解析帖子列表 __T: %w", err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return res, nil
 }

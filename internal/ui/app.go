@@ -274,7 +274,7 @@ func (a *App) footer() string {
 	} else if a.screen == ScreenThreadList {
 		hints = append(hints, "Enter 看帖", "n/p 翻页", "/ 搜帖", "e 排序", "q 返回")
 	} else if a.screen == ScreenReader {
-		hints = append(hints, "n/p 翻页", "q 返回")
+		hints = append(hints, "j/k 滚动", "n/p 翻页", "q 返回")
 	}
 	hints = append(hints, "? 帮助")
 	right.WriteString(dimStyle.Render(strings.Join(hints, "  ")))
