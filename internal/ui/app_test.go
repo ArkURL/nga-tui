@@ -152,7 +152,7 @@ func TestAppLoginLogout(t *testing.T) {
 		t.Fatalf("Esc 应返回版面，得到 %v", app.screen)
 	}
 
-	// 再按 L 进入登录视图（不再静默登出），按 X 登出
+	// 再按 L 进入登录视图（不再静默登出），X 后需 Y 确认登出
 	dispatch(app, t, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'L'}})
 	if app.screen != ScreenLogin {
 		t.Fatalf("L 应进入登录视图，得到 %v", app.screen)
@@ -160,9 +160,24 @@ func TestAppLoginLogout(t *testing.T) {
 	if !app.state.LoggedIn {
 		t.Fatal("L 不应直接登出，应保持登录")
 	}
+	// 按 X 进入确认，此时不应登出
 	dispatch(app, t, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'X'}})
+	if !app.state.LoggedIn || !app.login.confirmLogout {
+		t.Fatal("按 X 应进入确认状态，不应立即登出")
+	}
+	// 按其他键取消
+	dispatch(app, t, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	if app.login.confirmLogout {
+		t.Fatal("其他键应取消确认")
+	}
+	if !app.state.LoggedIn {
+		t.Fatal("取消确认后应仍保持登录")
+	}
+	// 重新 X + Y 确认登出
+	dispatch(app, t, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'X'}})
+	dispatch(app, t, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Y'}})
 	if app.state.LoggedIn {
-		t.Fatal("登录视图按 X 后 LoggedIn 应为 false")
+		t.Fatal("登录视图 X+Y 后 LoggedIn 应为 false")
 	}
 	if app.state.Client.LoggedIn() {
 		t.Fatal("登出后客户端不应有 cookie")

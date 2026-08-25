@@ -29,6 +29,8 @@ type loginModel struct {
 	capturing bool // 浏览器自动抓取 cookie 进行中
 	sp        spinner.Model
 	err       error
+	// confirmLogout 等待确认登出（防止误按 X 清掉会话）。
+	confirmLogout bool
 	// onSuccess 登录成功后的回调（App 注入：设置 cookie + 保存配置）。
 	onSuccess func(*api.Session)
 	// onLogout 登出回调（App 注入）。
@@ -56,6 +58,7 @@ func (m loginModel) Init() tea.Cmd { return nil }
 func (m *loginModel) reset() tea.Cmd {
 	m.mode = loginChoice
 	m.capturing = false
+	m.confirmLogout = false
 	m.err = nil
 	m.manual.Blur()
 	return nil
@@ -99,6 +102,17 @@ func (m loginModel) Update(msg tea.Msg) (loginModel, tea.Cmd) {
 
 // updateChoice 处理登录方式选择。
 func (m loginModel) updateChoice(msg tea.KeyMsg) (loginModel, tea.Cmd) {
+	// 确认登出状态：Y 确认，其他键取消
+	if m.confirmLogout {
+		m.confirmLogout = false
+		if msg.String() == "y" || msg.String() == "Y" {
+			if m.client != nil && m.client.LoggedIn() && m.onLogout != nil {
+				m.onLogout()
+				m.err = nil
+			}
+		}
+		return m, nil
+	}
 	switch msg.String() {
 	case "B":
 		m.mode = loginBrowser
@@ -110,10 +124,9 @@ func (m loginModel) updateChoice(msg tea.KeyMsg) (loginModel, tea.Cmd) {
 		m.err = nil
 		return m, m.manual.Focus()
 	case "X", "x":
-		if m.client != nil && m.client.LoggedIn() && m.onLogout != nil {
-			m.onLogout()
-			m.err = nil
-		}
+		// 先进入确认状态，防止误触登出
+		m.confirmLogout = true
+		m.err = nil
 		return m, nil
 	}
 	return m, nil
@@ -191,6 +204,12 @@ func (m loginModel) View() string {
 
 	switch m.mode {
 	case loginChoice:
+		if m.confirmLogout {
+			sb.WriteString("  " + errorStyle.Render("确认登出？") + "\n\n")
+			sb.WriteString("  " + dimStyle.Render("登出将清除本地保存的登录 Cookie") + "\n\n")
+			sb.WriteString("  " + dimStyle.Render("按 Y 确认登出 · 其他键取消") + "\n")
+			break
+		}
 		if m.client != nil && m.client.LoggedIn() {
 			sb.WriteString("  " + okStyle.Render("当前已登录") + "\n\n")
 			sb.WriteString("  " + dimStyle.Render("如需切换账号，请选择重新登录：") + "\n\n")
