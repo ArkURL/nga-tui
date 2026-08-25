@@ -157,23 +157,36 @@ func TestReaderScrollWithJK(t *testing.T) {
 	m.vp.Width = 80
 	m.vp.Height = 5
 	m.syncViewport()
+	if len(m.floorLines) != 2 {
+		t.Fatalf("应有 2 个楼层行号，得到 %d", len(m.floorLines))
+	}
 
-	start := m.vp.YOffset
-	// j 向下滚动
+	// j：跳到下一楼头部
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	if m.vp.YOffset <= start {
-		t.Fatalf("j 应向下滚动，offset=%d start=%d", m.vp.YOffset, start)
+	if m.vp.YOffset != m.floorLines[1] {
+		t.Fatalf("j 应跳到下一楼 %d，得到 %d", m.floorLines[1], m.vp.YOffset)
+	}
+	// k：跳回上一楼头部
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	if m.vp.YOffset != m.floorLines[0] {
+		t.Fatalf("k 应跳回上一楼 %d，得到 %d", m.floorLines[0], m.vp.YOffset)
+	}
+	// Shift+J（大写 J）：逐行细调
+	before := m.vp.YOffset
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
+	if m.vp.YOffset <= before {
+		t.Fatalf("Shift+J 应向下细调一行，offset=%d before=%d", m.vp.YOffset, before)
+	}
+	// Shift+K（大写 K）：逐行细调
+	before = m.vp.YOffset
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'K'}})
+	if m.vp.YOffset >= before {
+		t.Fatalf("Shift+K 应向上细调一行，offset=%d before=%d", m.vp.YOffset, before)
 	}
 	// G 滚到底部
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
 	if !m.vp.AtBottom() {
 		t.Fatalf("G 应滚到底部，offset=%d", m.vp.YOffset)
-	}
-	// k 向上滚动
-	before := m.vp.YOffset
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
-	if m.vp.YOffset >= before {
-		t.Fatalf("k 应向上滚动，offset=%d before=%d", m.vp.YOffset, before)
 	}
 	// g 回到顶部
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})

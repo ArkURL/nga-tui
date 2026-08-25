@@ -4,22 +4,24 @@ import "github.com/charmbracelet/bubbles/key"
 
 // keyMap 定义全局键位。各视图只订阅自己关心的绑定。
 type keyMap struct {
-	Up      key.Binding
-	Down    key.Binding
-	Enter   key.Binding
-	Back    key.Binding
-	Search  key.Binding
-	NextPg  key.Binding
-	PrevPg  key.Binding
-	Top     key.Binding
-	Bottom  key.Binding
-	Refresh  key.Binding
-	Sort     key.Binding
-	Favorite key.Binding
+	Up          key.Binding
+	Down        key.Binding
+	Enter       key.Binding
+	Back        key.Binding
+	Search      key.Binding
+	NextPg      key.Binding
+	PrevPg      key.Binding
+	Top         key.Binding
+	Bottom      key.Binding
+	ScrollUp    key.Binding
+	ScrollDown  key.Binding
+	Refresh     key.Binding
+	Sort        key.Binding
+	Favorite    key.Binding
 	ToggleForum key.Binding
-	Login    key.Binding
-	Help     key.Binding
-	Quit     key.Binding
+	Login       key.Binding
+	Help        key.Binding
+	Quit        key.Binding
 }
 
 func newKeyMap() keyMap {
@@ -33,6 +35,8 @@ func newKeyMap() keyMap {
 		PrevPg:      key.NewBinding(key.WithKeys("p", "pgup", "ctrlb"), key.WithHelp("p/PgUp", "上一页")),
 		Top:         key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "顶部")),
 		Bottom:      key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "底部")),
+		ScrollUp:    key.NewBinding(key.WithKeys("K"), key.WithHelp("Shift+K", "阅读页向上细调一行")),
+		ScrollDown:  key.NewBinding(key.WithKeys("J"), key.WithHelp("Shift+J", "阅读页向下细调一行")),
 		Refresh:     key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "刷新")),
 		Sort:        key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "切换排序")),
 		Favorite:    key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "收藏/取消收藏")),

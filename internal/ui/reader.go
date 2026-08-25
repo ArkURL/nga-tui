@@ -29,6 +29,8 @@ type readerModel struct {
 	sp     spinner.Model
 	vp     viewport.Model
 	err    error
+	// floorLines 记录每层楼头部在渲染内容中的起始行号（供 j/k 按楼跳转）。
+	floorLines []int
 }
 
 type contentLoadedMsg struct {
@@ -137,10 +139,16 @@ func (m readerModel) handleKey(msg tea.KeyMsg) (readerModel, tea.Cmd) {
 	case keyMatches(msg, km.Back):
 		return m, navCmd(ScreenThreadList, nil)
 	case keyMatches(msg, km.Up):
-		// k/↑：向上滚动一行
-		m.vp.LineUp(1)
+		// k/↑：跳到上一楼头部
+		m.vp.SetYOffset(m.prevFloorLine())
 	case keyMatches(msg, km.Down):
-		// j/↓：向下滚动一行
+		// j/↓：跳到下一楼头部
+		m.vp.SetYOffset(m.nextFloorLine())
+	case keyMatches(msg, km.ScrollUp):
+		// Shift+K：向上细调一行
+		m.vp.LineUp(1)
+	case keyMatches(msg, km.ScrollDown):
+		// Shift+J：向下细调一行
 		m.vp.LineDown(1)
 	case keyMatches(msg, km.Top):
 		m.vp.GotoTop()
@@ -198,9 +206,11 @@ func (m readerModel) View() string {
 	return m.vp.View()
 }
 
-// renderReplies 渲染当前页所有楼层。
-func (m readerModel) renderReplies() string {
+// renderReplies 渲染当前页所有楼层，并记录每楼头部在内容中的起始行号。
+func (m *readerModel) renderReplies() string {
 	var sb strings.Builder
+	line := 0
+	m.floorLines = m.floorLines[:0]
 	for i, r := range m.st.Replies {
 		u := m.st.ReplyUsers[r.AuthorID]
 		author := u.Username
@@ -213,18 +223,48 @@ func (m readerModel) renderReplies() string {
 		if r.Lou == 0 {
 			header = titleStyle.Render(m.st.CurrentThread.Subject) + "\n" + header
 		}
-		sb.WriteString(truncateLine(header, m.width))
+		header = truncateLine(header, m.width)
+		m.floorLines = append(m.floorLines, line)
+		sb.WriteString(header)
 		sb.WriteString("\n")
+		line += 1 + strings.Count(header, "\n")
 
 		// 内容（BBCode 渲染并按宽度折行）
 		body := bbcode.Render(r.Content, max(m.width-2, 20))
 		sb.WriteString(body)
 		sb.WriteString("\n\n")
+		line += strings.Count(body, "\n") + 2
 
 		if i < len(m.st.Replies)-1 {
 			sb.WriteString(dimStyle.Render(strings.Repeat("─", max(m.width-2, 10))))
 			sb.WriteString("\n\n")
+			line += 2
 		}
 	}
 	return sb.String()
+}
+
+// nextFloorLine 返回当前视口位置之后的下一楼头部行号；没有则返回当前偏移。
+func (m *readerModel) nextFloorLine() int {
+	top := m.vp.YOffset
+	for _, l := range m.floorLines {
+		if l > top {
+			return l
+		}
+	}
+	return top
+}
+
+// prevFloorLine 返回当前视口位置之前的上一楼头部行号。
+func (m *readerModel) prevFloorLine() int {
+	top := m.vp.YOffset
+	var prev int
+	for _, l := range m.floorLines {
+		if l < top {
+			prev = l
+		} else {
+			break
+		}
+	}
+	return prev
 }

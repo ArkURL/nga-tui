@@ -26,7 +26,8 @@ func (m helpModel) Update(msg tea.Msg) (helpModel, tea.Cmd) {
 
 func (m helpModel) View() string {
 	rows := [][2]string{
-		{"j / k / ↑ / ↓", "移动光标；阅读视图内上下滚动楼层"},
+		{"j / k / ↑ / ↓", "移动光标；阅读页内按楼跳转"},
+		{"Shift+J / Shift+K（阅读页）", "逐行细调滚动"},
 		{"Enter / l", "进入当前项"},
 		{"Esc / h / q", "返回上级（根级 q 退出）"},
 		{"n / p / PgDn / PgUp", "翻页"},
