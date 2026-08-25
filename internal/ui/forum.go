@@ -84,6 +84,16 @@ func (m forumModel) Init() tea.Cmd {
 	return tea.Batch(m.sp.Tick, loadCategoriesCmd(m.client))
 }
 
+// start 重置版面视图到加载态并重新拉取分类（指针方法，App 导航时调用）。
+func (m *forumModel) start() tea.Cmd {
+	if m.client == nil {
+		return nil
+	}
+	m.state = forumLoading
+	m.err = nil
+	return tea.Batch(m.sp.Tick, loadCategoriesCmd(m.client))
+}
+
 func (m forumModel) Update(msg tea.Msg) (forumModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:

@@ -32,6 +32,7 @@ type readerModel struct {
 }
 
 type contentLoadedMsg struct {
+	tid int // 请求时对应的帖子 tid，用于丢弃过期响应
 	res *api.ThreadContentResult
 	err error
 }
@@ -47,9 +48,10 @@ func newReaderModel() readerModel {
 }
 
 func loadContentCmd(st *State) tea.Cmd {
+	tid := st.CurrentThread.TID // 请求发起时的目标帖
 	return func() tea.Msg {
-		res, err := st.Client.GetThreadContent(st.CurrentThread.TID, st.ReadPage)
-		return contentLoadedMsg{res: res, err: err}
+		res, err := st.Client.GetThreadContent(tid, st.ReadPage)
+		return contentLoadedMsg{tid: tid, res: res, err: err}
 	}
 }
 
@@ -58,6 +60,18 @@ func (m readerModel) Init() tea.Cmd {
 		return nil
 	}
 	m.state = readerLoading
+	return tea.Batch(m.sp.Tick, loadContentCmd(m.st))
+}
+
+// start 重置阅读视图到加载态并加载当前帖（指针方法，App 导航时调用，
+// 修复 Init() 值接收者导致的旧内容残留闪屏）。
+func (m *readerModel) start() tea.Cmd {
+	if m.st == nil || m.st.CurrentThread == nil {
+		return nil
+	}
+	m.state = readerLoading
+	m.err = nil
+	m.vp.GotoTop() // 切换帖子时重置滚动位置
 	return tea.Batch(m.sp.Tick, loadContentCmd(m.st))
 }
 
@@ -83,6 +97,10 @@ func (m readerModel) Update(msg tea.Msg) (readerModel, tea.Cmd) {
 		return m, cmd
 
 	case contentLoadedMsg:
+		// 丢弃过期响应（用户已切换到其它帖子）
+		if m.st == nil || m.st.CurrentThread == nil || msg.tid != m.st.CurrentThread.TID {
+			return m, nil
+		}
 		if msg.err != nil {
 			m.state = readerError
 			m.err = msg.err

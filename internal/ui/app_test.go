@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -71,7 +72,7 @@ func TestAppForumToListToReader(t *testing.T) {
 	}
 
 	// 帖子列表加载完成
-	app.list, _ = app.list.Update(threadsLoadedMsg{res: &api.ThreadListResult{
+	app.list, _ = app.list.Update(threadsLoadedMsg{fid: "3", key: "", res: &api.ThreadListResult{
 		Threads: []model.Thread{{TID: 10, Subject: "主题1"}},
 		Page:    1,
 		Pages:   3,
@@ -97,7 +98,7 @@ func TestAppBackNavigation(t *testing.T) {
 	if app.screen != ScreenThreadList {
 		t.Fatalf("应进入帖子列表，得到 %v", app.screen)
 	}
-	app.list, _ = app.list.Update(threadsLoadedMsg{res: &api.ThreadListResult{
+	app.list, _ = app.list.Update(threadsLoadedMsg{fid: "1", key: "", res: &api.ThreadListResult{
 		Threads: []model.Thread{{TID: 1}}, Page: 1, Pages: 1,
 	}, err: nil})
 
@@ -293,15 +294,15 @@ func TestBackFromReaderKeepsListState(t *testing.T) {
 		t.Fatalf("应进入帖子列表，得到 %v", app.screen)
 	}
 	// 手动喂数据并移动选中项
-	app.list, _ = app.list.Update(threadsLoadedMsg{res: &api.ThreadListResult{
+	app.list, _ = app.list.Update(threadsLoadedMsg{fid: "1", key: "", res: &api.ThreadListResult{
 		Threads: []model.Thread{{TID: 1}, {TID: 2}, {TID: 3}},
 		Page: 1, Pages: 2,
 	}, err: nil})
 	app.list.cursor = 1
 
-	// 进入帖子（阅读）
+	// 进入帖子（阅读）——选中第 2 条 (TID=2)
 	dispatch(app, t, ent())
-	app.reader, _ = app.reader.Update(contentLoadedMsg{res: &api.ThreadContentResult{
+	app.reader, _ = app.reader.Update(contentLoadedMsg{tid: 2, res: &api.ThreadContentResult{
 		Replies: []model.Reply{{PID: 0, Lou: 0, Content: "主楼"}},
 		Page:    1, Pages: 1,
 	}, err: nil})
@@ -323,5 +324,112 @@ func TestBackFromReaderKeepsListState(t *testing.T) {
 	}
 	if len(app.list.st.Threads) != 3 {
 		t.Fatalf("列表数据不应变化，得到 %d 条", len(app.list.st.Threads))
+	}
+}
+
+func TestReaderNavToNewThreadShowsLoadingNotOldContent(t *testing.T) {
+	app := NewApp(api.NewClient(), false, nil)
+	app.reader.st = app.state
+
+	// 帖 A 已加载完成
+	app.state.CurrentThread = &model.Thread{TID: 1}
+	app.reader, _ = app.reader.Update(contentLoadedMsg{tid: 1, res: &api.ThreadContentResult{
+		Replies: []model.Reply{{Lou: 0, Content: "帖子A内容"}},
+	}, err: nil})
+	if app.reader.state != readerReady {
+		t.Fatalf("A 应已就绪，得到 %v", app.reader.state)
+	}
+
+	// 导航到帖 B：不执行返回的 cmd，仅验证导航副作用
+	_, cmd := app.Update(NavigateMsg{Screen: ScreenReader, Payload: model.Thread{TID: 2}})
+	if cmd == nil {
+		t.Fatal("进入 B 应返回加载命令")
+	}
+	if app.reader.state != readerLoading {
+		t.Fatalf("进入 B 后应立即 loading，得到 %v", app.reader.state)
+	}
+	if strings.Contains(app.reader.View(), "帖子A内容") {
+		t.Fatal("loading 时不应显示 A 的内容")
+	}
+
+	// 闭环：喂 B 的响应（先设视口尺寸以便渲染）
+	app.reader.width = 80
+	app.reader.vp.Width = 80
+	app.reader.vp.Height = 20
+	app.reader, _ = app.reader.Update(contentLoadedMsg{tid: 2, res: &api.ThreadContentResult{
+		Replies: []model.Reply{{Lou: 0, Content: "帖子B内容"}},
+	}, err: nil})
+	if app.reader.state != readerReady || !strings.Contains(app.reader.View(), "帖子B内容") {
+		t.Fatal("B 加载完成应显示 B 内容")
+	}
+}
+
+func TestListNavToNewBoardShowsLoadingNotOldList(t *testing.T) {
+	app := NewApp(api.NewClient(), false, nil)
+	app.list.st = app.state
+
+	// 版面 A 已加载完成
+	app.state.CurrentForum = &model.Forum{FID: "1", Name: "版面1"}
+	app.list, _ = app.list.Update(threadsLoadedMsg{fid: "1", key: "", res: &api.ThreadListResult{
+		Threads: []model.Thread{{TID: 1, Subject: "旧版面帖子"}},
+		Page:    1, Pages: 1,
+	}, err: nil})
+	if app.list.state != listReady {
+		t.Fatalf("旧版面应已就绪，得到 %v", app.list.state)
+	}
+
+	// 导航到版面 B
+	_, cmd := app.Update(NavigateMsg{Screen: ScreenThreadList, Payload: model.Forum{FID: "2", Name: "版面2"}})
+	if cmd == nil {
+		t.Fatal("切版面应返回加载命令")
+	}
+	if app.list.state != listLoading {
+		t.Fatalf("切版面后应立即 loading，得到 %v", app.list.state)
+	}
+	if strings.Contains(app.list.View(), "旧版面帖子") {
+		t.Fatal("loading 时不应显示旧版面的帖子")
+	}
+
+	// 闭环：喂新版面响应（先设视口尺寸以便渲染）
+	app.list.width = 80
+	app.list.vp.Width = 80
+	app.list.vp.Height = 20
+	app.list, _ = app.list.Update(threadsLoadedMsg{fid: "2", key: "", res: &api.ThreadListResult{
+		Threads: []model.Thread{{TID: 9, Subject: "新版面帖子"}},
+		Page:    1, Pages: 1,
+	}, err: nil})
+	if app.list.state != listReady || !strings.Contains(app.list.View(), "新版面帖子") {
+		t.Fatal("新版面加载完成应显示新版面帖子")
+	}
+}
+
+func TestForumBackKeepsState(t *testing.T) {
+	app := NewApp(api.NewClient(), false, nil)
+	app.forum.st = app.state
+	// forum 首次加载完成
+	app.forum, _ = app.forum.Update(categoriesLoadedMsg{cats: sampleCategories(), err: nil})
+	if app.forum.state != forumReady {
+		t.Fatalf("forum 应就绪，得到 %v", app.forum.state)
+	}
+
+	// 导航到帖子列表
+	_, _ = app.Update(NavigateMsg{Screen: ScreenThreadList, Payload: model.Forum{FID: "1"}})
+	if app.screen != ScreenThreadList {
+		t.Fatalf("应进入帖子列表，得到 %v", app.screen)
+	}
+
+	// 返回 forum：已就绪则保持状态，不应触发加载
+	_, cmd := app.Update(NavigateMsg{Screen: ScreenForum, Payload: nil})
+	if cmd != nil {
+		t.Fatal("返回 forum 且已就绪时不应触发加载命令")
+	}
+	if app.screen != ScreenForum {
+		t.Fatalf("应返回 forum，得到 %v", app.screen)
+	}
+	if app.forum.state != forumReady {
+		t.Fatalf("返回后 forum 应保持 ready，得到 %v", app.forum.state)
+	}
+	if len(app.forum.items) != 5 { // 分类头+组头+3版面
+		t.Fatalf("分类数据不应变化，得到 %d 项", len(app.forum.items))
 	}
 }

@@ -32,6 +32,8 @@ type threadListModel struct {
 }
 
 type threadsLoadedMsg struct {
+	fid string // 请求时对应的版面 fid，用于丢弃过期响应
+	key string // 请求时对应的搜索关键字
 	res *api.ThreadListResult
 	err error
 }
@@ -45,14 +47,13 @@ func newThreadListModel() threadListModel {
 }
 
 func loadThreadsCmd(st *State) tea.Cmd {
+	fid := st.CurrentForum.FID // 请求发起时的目标版面
+	key := st.ListSearchKey
+	page := st.ListPage
+	order := st.ListOrderBy
 	return func() tea.Msg {
-		res, err := st.Client.GetThreads(
-			st.CurrentForum.FID,
-			st.ListPage,
-			st.ListOrderBy,
-			st.ListSearchKey,
-		)
-		return threadsLoadedMsg{res: res, err: err}
+		res, err := st.Client.GetThreads(fid, page, order, key)
+		return threadsLoadedMsg{fid: fid, key: key, res: res, err: err}
 	}
 }
 
@@ -61,6 +62,18 @@ func (m threadListModel) Init() tea.Cmd {
 		return nil
 	}
 	m.state = listLoading
+	m.cursor = 0
+	return tea.Batch(m.sp.Tick, loadThreadsCmd(m.st))
+}
+
+// start 重置帖子列表到加载态并重新加载当前版面（指针方法，App 导航时调用，
+// 修复 Init() 值接收者导致的旧列表残留闪屏）。
+func (m *threadListModel) start() tea.Cmd {
+	if m.st == nil || m.st.CurrentForum == nil {
+		return nil
+	}
+	m.state = listLoading
+	m.err = nil
 	m.cursor = 0
 	return tea.Batch(m.sp.Tick, loadThreadsCmd(m.st))
 }
@@ -85,6 +98,11 @@ func (m threadListModel) Update(msg tea.Msg) (threadListModel, tea.Cmd) {
 		return m, cmd
 
 	case threadsLoadedMsg:
+		// 丢弃过期响应（用户已切换版面/搜索条件）
+		if m.st == nil || m.st.CurrentForum == nil ||
+			msg.fid != m.st.CurrentForum.FID || msg.key != m.st.ListSearchKey {
+			return m, nil
+		}
 		if msg.err != nil {
 			m.state = listError
 			m.err = msg.err

@@ -205,7 +205,16 @@ func (a *App) handleNavigate(msg NavigateMsg) tea.Cmd {
 	switch msg.Screen {
 	case ScreenForum:
 		a.screen = ScreenForum
-		return a.forum.Init()
+		// 已就绪则保持状态（分类低频变化，返回不重载）；加载在途不重复发起；
+		// 首次/错误后重试
+		switch a.forum.state {
+		case forumLoading:
+			return nil
+		case forumReady:
+			return nil
+		default:
+			return a.forum.start()
+		}
 	case ScreenThreadList:
 		a.screen = ScreenThreadList
 		if f, ok := msg.Payload.(model.Forum); ok {
@@ -217,7 +226,7 @@ func (a *App) handleNavigate(msg NavigateMsg) tea.Cmd {
 		}
 		if a.state.ListReload {
 			a.state.ListReload = false
-			return a.list.Init()
+			return a.list.start()
 		}
 		// 从阅读页/搜索返回：保持列表状态与选中项，不刷新（按 r 手动刷新）
 		return nil
@@ -227,7 +236,7 @@ func (a *App) handleNavigate(msg NavigateMsg) tea.Cmd {
 			a.state.CurrentThread = &th
 			a.state.ReadPage = 1
 		}
-		return a.reader.Init()
+		return a.reader.start()
 	case ScreenSearch:
 		a.screen = ScreenSearch
 		if sc, ok := msg.Payload.(searchScope); ok {
