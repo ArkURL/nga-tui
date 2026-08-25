@@ -17,9 +17,9 @@ import (
 type loginMode int
 
 const (
-	loginChoice loginMode = iota // 选择登录方式
-	loginBrowser                 // 浏览器自动抓取 cookie 进行中
-	loginManual                  // 手动粘贴 cookie
+	loginChoice  loginMode = iota // 选择登录方式
+	loginBrowser                  // 浏览器自动抓取 cookie 进行中
+	loginManual                   // 手动粘贴 cookie
 )
 
 type loginModel struct {

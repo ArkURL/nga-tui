@@ -37,18 +37,18 @@ const (
 )
 
 type forumModel struct {
-	st     *State
-	client *api.Client
-	state  forumState
+	st      *State
+	client  *api.Client
+	state   forumState
 	favOnly bool // 仅显示收藏版面
-	items  []forumItem
-	selIdx []int // 可选中项的索引（指向 items）
-	cursor int   // 在 selIdx 中的位置
-	width  int
-	height int
-	sp     spinner.Model
-	err    error
-	vp     viewport.Model
+	items   []forumItem
+	selIdx  []int // 可选中项的索引（指向 items）
+	cursor  int   // 在 selIdx 中的位置
+	width   int
+	height  int
+	sp      spinner.Model
+	err     error
+	vp      viewport.Model
 }
 
 type categoriesLoadedMsg struct {

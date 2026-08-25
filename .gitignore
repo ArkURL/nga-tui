@@ -3,6 +3,7 @@
 nga-tui.exe
 *.test
 *.out
+/dist/
 
 # 编辑器 / 系统
 .idea/

@@ -296,7 +296,7 @@ func TestBackFromReaderKeepsListState(t *testing.T) {
 	// 手动喂数据并移动选中项
 	app.list, _ = app.list.Update(threadsLoadedMsg{fid: "1", key: "", res: &api.ThreadListResult{
 		Threads: []model.Thread{{TID: 1}, {TID: 2}, {TID: 3}},
-		Page: 1, Pages: 2,
+		Page:    1, Pages: 2,
 	}, err: nil})
 	app.list.cursor = 1
 

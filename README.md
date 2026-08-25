@@ -102,3 +102,15 @@ go test ./...    # 单元测试
 go run ./cmd/verify        # 验证数据层接口
 go run ./cmd/verify <tid>  # 渲染指定帖子内容
 ```
+
+## 发布（CI/CD）
+
+- **CI**：推送/PR 到 `main` 自动跑 `go vet` + `go test`
+- **发布**：打 `v*` 标签后，GitHub Actions 用 GoReleaser 交叉编译（linux/darwin/windows × amd64/arm64）并发布到 GitHub Releases
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+发布产物含各平台压缩包与 `checksums.txt` 校验文件，可在 [Releases](https://github.com/ArkURL/nga-tui/releases) 页面下载。

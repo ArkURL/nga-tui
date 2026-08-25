@@ -40,7 +40,7 @@ var (
 			Bold(true)
 
 	okStyle = lipgloss.NewStyle().
-			Foreground(okColor)
+		Foreground(okColor)
 
 	statusBarStyle = lipgloss.NewStyle().
 			Background(lipgloss.Color("#1a1a1a")).

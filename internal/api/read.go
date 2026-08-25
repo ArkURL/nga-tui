@@ -11,7 +11,7 @@ import (
 
 // ThreadContentResult 是 read.php 的解析结果。
 type ThreadContentResult struct {
-	Replies []model.Reply  // 楼层，按服务端顺序（主楼在前）
+	Replies []model.Reply // 楼层，按服务端顺序（主楼在前）
 	Users   map[int]model.User
 	Page    int
 	Pages   int

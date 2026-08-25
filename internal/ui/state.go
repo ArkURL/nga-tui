@@ -59,10 +59,10 @@ type State struct {
 
 	// 阅读状态
 	CurrentThread *model.Thread
-	Replies      []model.Reply
-	ReplyUsers   map[int]model.User
-	ReadPage     int
-	ReadPages    int
+	Replies       []model.Reply
+	ReplyUsers    map[int]model.User
+	ReadPage      int
+	ReadPages     int
 }
 
 // NewState 创建初始状态。
