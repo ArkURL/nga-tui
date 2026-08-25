@@ -86,8 +86,9 @@ func (c *Client) SetOnCookiesChanged(fn func()) {
 
 // mergeResponseCookies 跟随服务端 Set-Cookie 更新会话 cookie。
 // NGA 可能轮换 passport token，若不更新会因旧 token 失效导致会话丢失。
-// 注意：只在拿到非空的会话 cookie 值时更新，绝不因"清空"指令删除，
-// 避免错误响应误清已保存的会话。返回会话 cookie 是否有变化。
+// 注意：
+//   - 只在已登录（已有 passport cookie）时才跟随，避免访客请求把无关 token 写入配置
+//   - 只在拿到非空的会话 cookie 值时更新，绝不因"清空"指令删除，避免误清会话
 func (c *Client) mergeResponseCookies(h http.Header) bool {
 	if len(h) == 0 {
 		return false
@@ -95,6 +96,10 @@ func (c *Client) mergeResponseCookies(h http.Header) bool {
 	changed := false
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	// 未登录时跟随没有意义，且可能写入垃圾 token
+	if c.cookies["ngaPassportUid"] == "" {
+		return false
+	}
 	for _, sc := range h.Values("Set-Cookie") {
 		name, value, ok := parseSetCookie(sc)
 		if !ok {

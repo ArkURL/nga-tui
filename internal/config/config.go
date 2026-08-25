@@ -5,7 +5,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 )
+
+// saveMu 保护配置文件的并发读写，避免多个请求同时持久化时写坏文件。
+var saveMu sync.Mutex
 
 // Config 是持久化配置。
 type Config struct {
@@ -37,6 +41,8 @@ func path() (string, error) {
 
 // Load 读取配置；文件不存在时返回空配置。
 func Load() (*Config, error) {
+	saveMu.Lock()
+	defer saveMu.Unlock()
 	p, err := path()
 	if err != nil {
 		return nil, err
@@ -60,6 +66,8 @@ func Load() (*Config, error) {
 
 // Save 保存配置（0600 权限，仅本用户可读）。
 func Save(cfg *Config) error {
+	saveMu.Lock()
+	defer saveMu.Unlock()
 	p, err := path()
 	if err != nil {
 		return err

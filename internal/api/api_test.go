@@ -115,11 +115,25 @@ func TestMergeResponseCookies(t *testing.T) {
 
 func TestMergeResponseCookiesNoChange(t *testing.T) {
 	c := NewClient()
-	c.SetCookies(map[string]string{"ngaPassportCid": "same"})
+	c.SetCookies(map[string]string{"ngaPassportUid": "1", "ngaPassportCid": "same"})
 	h := http.Header{}
 	h.Add("Set-Cookie", "ngaPassportCid=same; Path=/")
 	if c.mergeResponseCookies(h) {
 		t.Fatal("值相同不应视为变化")
+	}
+}
+
+func TestMergeResponseCookiesGuestNotFollow(t *testing.T) {
+	// 未登录（无 uid）时不应跟随 Set-Cookie，避免写入垃圾 token
+	c := NewClient()
+	c.SetCookies(map[string]string{"ngaPassportCid": "guest-token"})
+	h := http.Header{}
+	h.Add("Set-Cookie", "ngaPassportCid=some-token; Path=/")
+	if c.mergeResponseCookies(h) {
+		t.Fatal("访客会话不应跟随 Set-Cookie")
+	}
+	if c.Cookies()["ngaPassportCid"] != "guest-token" {
+		t.Fatal("访客 cookie 不应被修改")
 	}
 }
 

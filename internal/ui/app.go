@@ -9,6 +9,7 @@ import (
 
 	"github.com/ArkURL/nga-tui/internal/api"
 	"github.com/ArkURL/nga-tui/internal/config"
+	"github.com/ArkURL/nga-tui/internal/debug"
 	"github.com/ArkURL/nga-tui/internal/model"
 )
 
@@ -75,6 +76,7 @@ func (a *App) onLoginSuccess(sess *api.Session) {
 
 // logout 登出：清除 cookie 与配置（保留收藏）。
 func (a *App) logout() {
+	debug.Logf("执行登出")
 	a.state.Client.SetCookies(map[string]string{})
 	a.state.LoggedIn = false
 	persistAll(map[string]string{}, a.state.Favorites)
@@ -82,8 +84,18 @@ func (a *App) logout() {
 
 // persistAll 把当前 cookie 与收藏写入配置文件。
 func persistAll(cookies map[string]string, favs map[string]bool) {
+	debug.Logf("持久化配置: cookie名=%v 收藏数=%d", cookieNames(cookies), len(favs))
 	cfg := &config.Config{Cookies: cookies, Favorites: favoriteList(favs)}
 	_ = config.Save(cfg)
+}
+
+// cookieNames 返回 cookie 的键名列表（不打印值，避免泄露 token）。
+func cookieNames(cookies map[string]string) []string {
+	out := make([]string, 0, len(cookies))
+	for k := range cookies {
+		out = append(out, k)
+	}
+	return out
 }
 
 // favoriteList 把收藏 map 转为有序列表。

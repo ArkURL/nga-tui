@@ -32,7 +32,7 @@ func main() {
 		case ok:
 			loggedIn = true
 		default:
-			debug.Logf("启动: 检测到 %d 个已保存 cookie 但会话失效（2048）", len(cfg.Cookies))
+			debug.Logf("启动: 检测到 %d 个已保存 cookie（%v）但会话失效（2048）", len(cfg.Cookies), cookieNameList(cfg.Cookies))
 		}
 	} else {
 		debug.Logf("启动: 无已保存 cookie")
@@ -44,4 +44,13 @@ func main() {
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("程序异常退出: %v\n", err)
 	}
+}
+
+// cookieNameList 返回 cookie 键名列表（不打印值）。
+func cookieNameList(cookies map[string]string) []string {
+	out := make([]string, 0, len(cookies))
+	for k := range cookies {
+		out = append(out, k)
+	}
+	return out
 }
