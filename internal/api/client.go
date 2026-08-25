@@ -140,11 +140,11 @@ func (c *Client) Get(path string, params url.Values) ([]byte, error) {
 	return body, err
 }
 
-// fetchJSON 获取并解析响应；解析失败（如 NGA 响应被截断）时退避重试。
+// fetchJSON 获取并解析响应；解析失败（如 NGA 间歇性返回被截断的响应）时退避重试。
 // APIError/HTTPError 等确定性错误不重试。
 func (c *Client) fetchJSON(path string, params url.Values, parse func(body []byte) error) error {
 	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := 0; attempt < 5; attempt++ {
 		body, err := c.Get(path, params)
 		if err != nil {
 			return err
@@ -156,14 +156,15 @@ func (c *Client) fetchJSON(path string, params url.Values, parse func(body []byt
 			if _, ok := err.(*HTTPError); ok {
 				return err
 			}
-			debug.Logf("解析响应失败（第 %d 次）: %v", attempt+1, err)
+			debug.Logf("解析响应失败（第 %d/5 次）: %v", attempt+1, err)
 			lastErr = err
-			time.Sleep(time.Duration(attempt+1) * 500 * time.Millisecond)
+			// 渐进退避，给 NGA 服务端留出恢复时间
+			time.Sleep(time.Duration(attempt+1) * 400 * time.Millisecond)
 			continue
 		}
 		return nil
 	}
-	return fmt.Errorf("多次尝试后解析仍失败: %w", lastErr)
+	return fmt.Errorf("NGA 响应多次不完整（可能为服务端波动），请稍后重试: %w", lastErr)
 }
 
 func (c *Client) doHost(method, host, path string, params url.Values, body io.Reader) ([]byte, http.Header, error) {
