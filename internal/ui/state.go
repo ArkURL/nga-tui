@@ -53,6 +53,9 @@ type State struct {
 	ListOrderBy  string
 	// ListSearchKey 非空表示当前列表是搜索结果。
 	ListSearchKey string
+	// ListReload 进入帖子列表视图时需要重新加载（切版面/新搜索时为 true；
+	// 从阅读页返回时保持 false，避免刷新丢失选中项）。
+	ListReload bool
 
 	// 阅读状态
 	CurrentThread *model.Thread

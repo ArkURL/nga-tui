@@ -92,9 +92,10 @@ func (m searchModel) submit() (searchModel, tea.Cmd) {
 		return m, nil
 	}
 	if m.scope == searchScopeThread {
-		// 版内搜帖：设置搜索状态后回到帖子列表加载
+		// 版内搜帖：设置搜索状态并标记需要重新加载
 		m.st.ListSearchKey = kw
 		m.st.ListPage = 1
+		m.st.ListReload = true
 		return m, navCmd(ScreenThreadList, nil)
 	}
 	// 版面搜索：本地过滤已加载的分类

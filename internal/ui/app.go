@@ -209,11 +209,18 @@ func (a *App) handleNavigate(msg NavigateMsg) tea.Cmd {
 	case ScreenThreadList:
 		a.screen = ScreenThreadList
 		if f, ok := msg.Payload.(model.Forum); ok {
+			// 进入/切换版面：需要重新加载
 			a.state.CurrentForum = &f
 			a.state.ListSearchKey = ""
 			a.state.ListPage = 1
+			a.state.ListReload = true
 		}
-		return a.list.Init()
+		if a.state.ListReload {
+			a.state.ListReload = false
+			return a.list.Init()
+		}
+		// 从阅读页/搜索返回：保持列表状态与选中项，不刷新（按 r 手动刷新）
+		return nil
 	case ScreenReader:
 		a.screen = ScreenReader
 		if th, ok := msg.Payload.(model.Thread); ok {

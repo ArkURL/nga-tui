@@ -281,3 +281,47 @@ func TestSessionPersistRoundTrip(t *testing.T) {
 		t.Fatalf("收藏未持久化: %+v", cfg.Favorites)
 	}
 }
+
+func TestBackFromReaderKeepsListState(t *testing.T) {
+	app := NewApp(api.NewClient(), false, nil)
+	app.forum, _ = app.forum.Update(categoriesLoadedMsg{cats: sampleCategories(), err: nil})
+	app.list.st = app.state
+
+	// 进入帖子列表（版面入口 → 加载）
+	dispatch(app, t, ent())
+	if app.screen != ScreenThreadList {
+		t.Fatalf("应进入帖子列表，得到 %v", app.screen)
+	}
+	// 手动喂数据并移动选中项
+	app.list, _ = app.list.Update(threadsLoadedMsg{res: &api.ThreadListResult{
+		Threads: []model.Thread{{TID: 1}, {TID: 2}, {TID: 3}},
+		Page: 1, Pages: 2,
+	}, err: nil})
+	app.list.cursor = 1
+
+	// 进入帖子（阅读）
+	dispatch(app, t, ent())
+	app.reader, _ = app.reader.Update(contentLoadedMsg{res: &api.ThreadContentResult{
+		Replies: []model.Reply{{PID: 0, Lou: 0, Content: "主楼"}},
+		Page:    1, Pages: 1,
+	}, err: nil})
+	if app.screen != ScreenReader {
+		t.Fatalf("应进入阅读视图，得到 %v", app.screen)
+	}
+
+	// 返回帖子列表
+	dispatch(app, t, esc())
+	if app.screen != ScreenThreadList {
+		t.Fatalf("应返回帖子列表，得到 %v", app.screen)
+	}
+	// 关键断言：列表保持 ready、选中项不变、不触发加载
+	if app.list.state != listReady {
+		t.Fatalf("返回后列表应为 ready，得到 %v", app.list.state)
+	}
+	if app.list.cursor != 1 {
+		t.Fatalf("返回后选中项应为 1，得到 %d", app.list.cursor)
+	}
+	if len(app.list.st.Threads) != 3 {
+		t.Fatalf("列表数据不应变化，得到 %d 条", len(app.list.st.Threads))
+	}
+}
