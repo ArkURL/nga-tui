@@ -10,6 +10,7 @@ import (
 
 	"github.com/ArkURL/nga-tui/internal/api"
 	"github.com/ArkURL/nga-tui/internal/debug"
+	"github.com/ArkURL/nga-tui/internal/model"
 )
 
 type listState int
@@ -29,13 +30,16 @@ type threadListModel struct {
 	vp     viewport.Model
 	err    error
 	cursor int
+	// cursorLines 记录每个可选中项（子版面+帖子）首行在渲染内容中的行号。
+	cursorLines []int
 }
 
 type threadsLoadedMsg struct {
-	fid string // 请求时对应的版面 fid，用于丢弃过期响应
-	key string // 请求时对应的搜索关键字
-	res *api.ThreadListResult
-	err error
+	fid  string // 请求时对应的版面 fid，用于丢弃过期响应
+	stid string // 请求时对应的合集 stid
+	key  string // 请求时对应的搜索关键字
+	res  *api.ThreadListResult
+	err  error
 }
 
 func newThreadListModel() threadListModel {
@@ -47,13 +51,14 @@ func newThreadListModel() threadListModel {
 }
 
 func loadThreadsCmd(st *State) tea.Cmd {
-	fid := st.CurrentForum.FID // 请求发起时的目标版面
+	fid := st.CurrentForum.FID // 请求发起时的目标版面（取 CurrentForum 值，非发送参数）
+	stid := st.CurrentForum.STID
 	key := st.ListSearchKey
 	page := st.ListPage
 	order := st.ListOrderBy
 	return func() tea.Msg {
-		res, err := st.Client.GetThreads(fid, page, order, key)
-		return threadsLoadedMsg{fid: fid, key: key, res: res, err: err}
+		res, err := st.Client.GetThreads(fid, stid, page, order, key)
+		return threadsLoadedMsg{fid: fid, stid: stid, key: key, res: res, err: err}
 	}
 }
 
@@ -98,9 +103,11 @@ func (m threadListModel) Update(msg tea.Msg) (threadListModel, tea.Cmd) {
 		return m, cmd
 
 	case threadsLoadedMsg:
-		// 丢弃过期响应（用户已切换版面/搜索条件）
+		// 丢弃过期响应（用户已切换版面/合集/搜索条件）
 		if m.st == nil || m.st.CurrentForum == nil ||
-			msg.fid != m.st.CurrentForum.FID || msg.key != m.st.ListSearchKey {
+			msg.fid != m.st.CurrentForum.FID ||
+			msg.stid != m.st.CurrentForum.STID ||
+			msg.key != m.st.ListSearchKey {
 			return m, nil
 		}
 		if msg.err != nil {
@@ -114,6 +121,7 @@ func (m threadListModel) Update(msg tea.Msg) (threadListModel, tea.Cmd) {
 		}
 		m.state = listReady
 		m.st.Threads = msg.res.Threads
+		m.st.SubForums = msg.res.SubForums
 		m.st.ListPage = msg.res.Page
 		m.st.ListPages = msg.res.Pages
 		m.cursor = 0
@@ -135,14 +143,56 @@ func (m threadListModel) handleKey(msg tea.KeyMsg) (threadListModel, tea.Cmd) {
 	case keyMatches(msg, km.Top):
 		m.cursor = 0
 	case keyMatches(msg, km.Bottom):
-		m.cursor = len(m.st.Threads) - 1
+		if n := len(m.cursorLines); n > 0 {
+			m.cursor = n - 1
+		}
 	case keyMatches(msg, km.Enter):
-		if m.state == listReady && len(m.st.Threads) > 0 {
-			th := m.st.Threads[m.cursor]
+		if m.state == listReady && len(m.cursorLines) > 0 {
+			if m.cursor < m.subCount() {
+				// 钻取子版面/合集
+				sf := m.st.SubForums[m.cursor]
+				if m.st.CurrentForum != nil {
+					m.st.BoardStack = append(m.st.BoardStack, *m.st.CurrentForum)
+				}
+				target := model.Forum{FID: sf.ID, STID: sf.ID, Name: sf.Name}
+				if !sf.IsCollection {
+					target.FID = sf.ID
+					target.STID = ""
+				}
+				return m, navCmd(ScreenThreadList, target)
+			}
+			th := m.st.Threads[m.cursor-m.subCount()]
 			return m, navCmd(ScreenReader, th)
 		}
 	case keyMatches(msg, km.Back):
+		if n := len(m.st.BoardStack); n > 0 {
+			// 弹出父版面并重载
+			parent := m.st.BoardStack[n-1]
+			m.st.BoardStack = m.st.BoardStack[:n-1]
+			m.st.CurrentForum = &parent
+			m.st.ListSearchKey = ""
+			m.st.ListPage = 1
+			return m, m.start()
+		}
 		return m, navCmd(ScreenForum, nil)
+	case keyMatches(msg, km.Favorite):
+		if m.state == listReady && m.st != nil {
+			sub := m.subCount()
+			var ref model.BoardRef
+			if m.cursor < sub {
+				ref = m.st.SubForums[m.cursor].BoardRef()
+			} else if cur := m.st.CurrentForum; cur != nil {
+				ref = model.BoardRef{FID: cur.FID, STID: cur.STID, Name: cur.Name}
+			}
+			if ref.Key() != "" {
+				if _, ok := m.st.Favorites[ref.Key()]; ok {
+					delete(m.st.Favorites, ref.Key())
+				} else {
+					m.st.Favorites[ref.Key()] = ref
+				}
+				persistAll(m.st.Client.Cookies(), m.st.Favorites)
+			}
+		}
 	case keyMatches(msg, km.NextPg):
 		return m.gotoPage(m.st.ListPage + 1)
 	case keyMatches(msg, km.PrevPg):
@@ -172,6 +222,14 @@ func (m threadListModel) handleKey(msg tea.KeyMsg) (threadListModel, tea.Cmd) {
 	return m, nil
 }
 
+// subCount 返回当前列表中可钻取的子版面数量（搜索时隐藏子版面）。
+func (m *threadListModel) subCount() int {
+	if m.st == nil || m.st.ListSearchKey != "" {
+		return 0
+	}
+	return len(m.st.SubForums)
+}
+
 // gotoPage 跳转页面（超出范围时忽略）。
 func (m threadListModel) gotoPage(page int) (threadListModel, tea.Cmd) {
 	if page < 1 || (m.st.ListPages > 0 && page > m.st.ListPages) {
@@ -184,7 +242,7 @@ func (m threadListModel) gotoPage(page int) (threadListModel, tea.Cmd) {
 }
 
 func (m *threadListModel) move(delta int) {
-	n := len(m.st.Threads)
+	n := len(m.cursorLines)
 	if n == 0 {
 		return
 	}
@@ -196,15 +254,14 @@ func (m *threadListModel) syncViewport() {
 		return
 	}
 	m.vp.SetContent(m.renderList())
-	if len(m.st.Threads) == 0 {
+	if len(m.cursorLines) == 0 {
 		return
 	}
 	visible := m.vp.Height
 	if visible <= 0 {
 		return
 	}
-	// 列表头占 2 行，每帖占 2 行（标题 + meta）
-	cur := 2 + m.cursor*2
+	cur := m.cursorLines[m.cursor]
 	if cur < m.vp.YOffset {
 		m.vp.SetYOffset(cur)
 	} else if cur >= m.vp.YOffset+visible {
@@ -228,15 +285,17 @@ func (m threadListModel) View() string {
 			dimStyle.Render(hint),
 		)
 	}
-	if len(m.st.Threads) == 0 {
+	if len(m.st.SubForums) == 0 && len(m.st.Threads) == 0 {
 		return "\n  " + dimStyle.Render("没有帖子")
 	}
 	return m.vp.View()
 }
 
-// renderList 渲染帖子列表（首行为版面标题头）。
-func (m threadListModel) renderList() string {
+// renderList 渲染帖子列表（首行为版面标题头，随后是可钻取的子版面区与帖子区）。
+func (m *threadListModel) renderList() string {
 	var sb strings.Builder
+	line := 0
+	m.cursorLines = m.cursorLines[:0]
 	if m.st.CurrentForum != nil {
 		title := m.st.CurrentForum.Name
 		if m.st.ListSearchKey != "" {
@@ -245,21 +304,55 @@ func (m threadListModel) renderList() string {
 		title += fmt.Sprintf("  %d/%d 页", m.st.ListPage, m.st.ListPages)
 		sb.WriteString(truncateLine(headerStyle.Render(" "+title), m.width))
 		sb.WriteString("\n\n")
+		line += 2
 	}
-	for i, th := range m.st.Threads {
-		var line string
-		if i == m.cursor {
-			line = "  " + selectedStyle.Render("▸ "+th.Subject)
+
+	// 子版面区（搜索时隐藏）
+	if m.st.ListSearchKey == "" && len(m.st.SubForums) > 0 {
+		sb.WriteString("  " + dimStyle.Render("── 子版面 ──"))
+		sb.WriteString("\n")
+		line++
+		for _, sf := range m.st.SubForums {
+			name := sf.Name
+			if sf.IsCollection {
+				name += " [合集]"
+			}
+			var l string
+			if m.cursor == len(m.cursorLines) {
+				l = "  " + selectedStyle.Render("▸ "+name)
+			} else {
+				l = "    " + name
+			}
+			if sf.Info != "" {
+				l += " " + dimStyle.Render("· "+sf.Info)
+			}
+			m.cursorLines = append(m.cursorLines, line)
+			sb.WriteString(truncateLine(l, m.width))
+			sb.WriteString("\n")
+			line++
+		}
+		sb.WriteString("\n")
+		line++
+	}
+
+	// 帖子区
+	for _, th := range m.st.Threads {
+		var l string
+		idx := len(m.cursorLines)
+		if idx == m.cursor {
+			l = "  " + selectedStyle.Render("▸ "+th.Subject)
 		} else {
-			line = "    " + th.Subject
+			l = "    " + th.Subject
 		}
 		meta := fmt.Sprintf("%s · %d回复 · %s", th.Author, th.Replies, formatTime(th.LastPost))
 		meta = dimStyle.Render(meta)
 		// 标题与 meta 分行显示，更易读
-		sb.WriteString(truncateLine(line, m.width))
+		m.cursorLines = append(m.cursorLines, line)
+		sb.WriteString(truncateLine(l, m.width))
 		sb.WriteString("\n")
 		sb.WriteString(truncateLine("      "+meta, m.width))
 		sb.WriteString("\n")
+		line += 2
 	}
 	return sb.String()
 }

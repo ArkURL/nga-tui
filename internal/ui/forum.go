@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -138,7 +139,8 @@ func (m *forumModel) rebuild() {
 		return
 	}
 	if m.favOnly {
-		m.items = buildFavItems(m.st.Categories, m.st.Favorites)
+		m.items = buildFavItems(m.st.Favorites)
+		m.backfillFavNames()
 	} else {
 		m.items = buildForumItems(m.st.Categories)
 	}
@@ -176,10 +178,11 @@ func (m forumModel) handleKey(msg tea.KeyMsg) (forumModel, tea.Cmd) {
 	case keyMatches(msg, km.Favorite):
 		if m.state == forumReady && len(m.selIdx) > 0 && m.st != nil {
 			f := m.items[m.selIdx[m.cursor]].forum
-			if m.st.Favorites[f.FID] {
-				delete(m.st.Favorites, f.FID)
+			k := f.BoardKey()
+			if _, ok := m.st.Favorites[k]; ok {
+				delete(m.st.Favorites, k)
 			} else {
-				m.st.Favorites[f.FID] = true
+				m.st.Favorites[k] = model.BoardRef{FID: f.FID, STID: f.STID, Name: f.Name}
 			}
 			persistAll(m.st.Client.Cookies(), m.st.Favorites)
 			m.rebuild()
@@ -266,8 +269,10 @@ func (m forumModel) renderList() string {
 				name += " [合集]"
 			}
 			mark := "  "
-			if m.st != nil && m.st.Favorites[it.forum.FID] {
-				mark = "★ "
+			if m.st != nil {
+				if _, ok := m.st.Favorites[it.forum.BoardKey()]; ok {
+					mark = "★ "
+				}
 			}
 			name = mark + name
 			info := ""
@@ -307,22 +312,49 @@ func buildForumItems(cats []model.Category) []forumItem {
 	return items
 }
 
-// buildFavItems 只保留收藏的版面（扁平列表，按 fid 去重）。
-func buildFavItems(cats []model.Category, favs map[string]bool) []forumItem {
+// buildFavItems 直接渲染收藏列表（不再扫描分类树，因此子版面收藏也能显示）。
+func buildFavItems(favs map[string]model.BoardRef) []forumItem {
 	var items []forumItem
-	seen := map[string]bool{}
-	for _, cat := range cats {
+	for _, ref := range favs {
+		items = append(items, forumItem{
+			kind: itemForum,
+			forum: model.Forum{
+				FID:  ref.FID,
+				STID: ref.STID,
+				Name: ref.Name,
+			},
+		})
+	}
+	return items
+}
+
+// backfillFavNames 用分类树回填旧配置收藏（只有 fid、无 Name）的名称，查不到退化显示 Key。
+func (m *forumModel) backfillFavNames() {
+	if m.st == nil {
+		return
+	}
+	nameByKey := map[string]string{}
+	for _, cat := range m.st.Categories {
 		for _, g := range cat.Groups {
 			for _, f := range g.Forums {
-				if !favs[f.FID] || seen[f.FID] {
-					continue
-				}
-				seen[f.FID] = true
-				items = append(items, forumItem{kind: itemForum, forum: f})
+				nameByKey[f.BoardKey()] = f.Name
 			}
 		}
 	}
-	return items
+	for i := range m.items {
+		f := &m.items[i].forum
+		if f.Name == "" {
+			if n, ok := nameByKey[f.BoardKey()]; ok {
+				f.Name = n
+			} else {
+				f.Name = f.BoardKey()
+			}
+		}
+	}
+	// 名称回填后重排序
+	sort.Slice(m.items, func(i, j int) bool {
+		return m.items[i].forum.Name < m.items[j].forum.Name
+	})
 }
 
 func selectableIndices(items []forumItem) []int {

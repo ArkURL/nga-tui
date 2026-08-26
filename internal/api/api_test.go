@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/ArkURL/nga-tui/internal/model"
 )
 
 func TestEscapeControlChars(t *testing.T) {
@@ -204,5 +206,68 @@ func TestEscapeControlCharsValidUnicode(t *testing.T) {
 	}
 	if m["content"] != "中文\\n测试" {
 		t.Fatalf("内容不对: %q", m["content"])
+	}
+}
+
+func TestGetThreadsUsesStid(t *testing.T) {
+	var gotQuery string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.Write([]byte(`{"data":{"__PAGE":1,"__ROWS":5,"__T":[],"__F":{"fid":428,"sub_forums":null}}}`))
+	}))
+	defer ts.Close()
+
+	c := NewClient()
+	c.base = ts.URL
+	c.minInterval = 0
+
+	// 有 stid 时发 stid 参数
+	if _, err := c.GetThreads("", "29182350", 1, "lastpostdesc", ""); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(gotQuery, "stid=29182350") {
+		t.Fatalf("合集应发 stid 参数，得到 %s", gotQuery)
+	}
+	if strings.Contains(gotQuery, "fid=") {
+		t.Fatalf("合集不应发 fid 参数，得到 %s", gotQuery)
+	}
+
+	// 无 stid 时发 fid 参数
+	if _, err := c.GetThreads("7", "", 1, "lastpostdesc", ""); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(gotQuery, "fid=7") {
+		t.Fatalf("普通版面应发 fid 参数，得到 %s", gotQuery)
+	}
+}
+
+func TestParseSubForums(t *testing.T) {
+	raw := json.RawMessage(`{
+		"255":[255,"团队管理经验交流","管理经验交流",14673796,2606],
+		"t29182350":[29182350,"评测/安利",null,29182350,542]
+	}`)
+	subs := parseSubForums(raw)
+	if len(subs) != 2 {
+		t.Fatalf("应解析出 2 个子版面，得到 %d", len(subs))
+	}
+	var board, col *model.SubForum
+	for i := range subs {
+		if subs[i].IsCollection {
+			col = &subs[i]
+		} else {
+			board = &subs[i]
+		}
+	}
+	if board == nil || board.ID != "255" || board.Name != "团队管理经验交流" || board.IsCollection {
+		t.Fatalf("子版面解析不对: %+v", board)
+	}
+	if col == nil || col.ID != "29182350" || col.Name != "评测/安利" || !col.IsCollection {
+		t.Fatalf("合集解析不对: %+v", col)
+	}
+	if parseSubForums(json.RawMessage("null")) != nil {
+		t.Fatal("null 应返回 nil")
+	}
+	if parseSubForums(json.RawMessage("")) != nil {
+		t.Fatal("缺失应返回 nil")
 	}
 }

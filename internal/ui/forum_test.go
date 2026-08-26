@@ -89,13 +89,12 @@ func TestForumBackOnEmpty(t *testing.T) {
 }
 
 func TestBuildFavItems(t *testing.T) {
-	cats := sampleCategories() // 版面1/2/3
-	favs := map[string]bool{"2": true}
-	items := buildFavItems(cats, favs)
+	favs := map[string]model.BoardRef{"2": {FID: "2", Name: "版面2"}}
+	items := buildFavItems(favs)
 	if len(items) != 1 || items[0].forum.FID != "2" {
 		t.Fatalf("收藏列表应为 fid=2，得到 %+v", items)
 	}
-	if len(buildFavItems(cats, map[string]bool{})) != 0 {
+	if len(buildFavItems(map[string]model.BoardRef{})) != 0 {
 		t.Fatal("无收藏应为空")
 	}
 }
@@ -111,12 +110,12 @@ func TestForumFavoriteToggle(t *testing.T) {
 
 	// f 收藏
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
-	if !m.st.Favorites["2"] {
+	if _, ok := m.st.Favorites["2"]; !ok {
 		t.Fatal("f 应收藏 fid=2")
 	}
 	// 再按 f 取消收藏
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
-	if m.st.Favorites["2"] {
+	if _, ok := m.st.Favorites["2"]; ok {
 		t.Fatal("再次 f 应取消收藏 fid=2")
 	}
 }
@@ -126,7 +125,10 @@ func TestForumToggleFilter(t *testing.T) {
 	m.st = NewState(api.NewClient())
 	m.state = forumReady
 	m.st.Categories = sampleCategories()
-	m.st.Favorites = map[string]bool{"1": true, "3": true}
+	m.st.Favorites = map[string]model.BoardRef{
+		"1": {FID: "1", Name: "版面1"},
+		"3": {FID: "3", Name: "版面3"},
+	}
 	m.rebuild()
 	if m.favOnly {
 		t.Fatal("初始应为全部模式")
@@ -161,19 +163,19 @@ func TestSearchResultsFavorite(t *testing.T) {
 
 	// 搜索结果中按 f 收藏
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
-	if !m.st.Favorites["2"] {
+	if _, ok := m.st.Favorites["2"]; !ok {
 		t.Fatal("搜索结果的 f 应收藏 fid=2")
 	}
 	// 再按 f 取消收藏
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
-	if m.st.Favorites["2"] {
+	if _, ok := m.st.Favorites["2"]; ok {
 		t.Fatal("再次 f 应取消收藏 fid=2")
 	}
 }
 
 func TestAppStartupFavOnly(t *testing.T) {
 	// 有收藏：启动进入收藏视图
-	app := NewApp(api.NewClient(), false, []string{"7"})
+	app := NewApp(api.NewClient(), false, []model.BoardRef{{FID: "7"}})
 	if !app.forum.favOnly {
 		t.Fatal("有收藏时启动应直接显示收藏视图")
 	}

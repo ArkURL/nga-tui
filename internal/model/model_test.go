@@ -55,3 +55,36 @@ func TestUserStringUID(t *testing.T) {
 		t.Fatalf("容错解析结果不对: %+v", u)
 	}
 }
+
+func TestBoardRefKey(t *testing.T) {
+	if (BoardRef{FID: "7"}).Key() != "7" {
+		t.Fatal("纯 fid 的 Key 应为 fid")
+	}
+	if (BoardRef{STID: "29182350"}).Key() != "29182350" {
+		t.Fatal("合集 Key 应为 stid")
+	}
+	if (BoardRef{FID: "428", STID: "29182350"}).Key() != "29182350" {
+		t.Fatal("fid+stid 并存时 Key 应为 stid")
+	}
+}
+
+func TestBoardRefUnmarshalOldFormat(t *testing.T) {
+	// 旧配置：裸字符串 fid
+	var br BoardRef
+	if err := json.Unmarshal([]byte(`"7"`), &br); err != nil {
+		t.Fatalf("解析失败: %v", err)
+	}
+	if br.FID != "7" || br.Key() != "7" {
+		t.Fatalf("旧格式解析不对: %+v", br)
+	}
+}
+
+func TestBoardRefUnmarshalNewFormat(t *testing.T) {
+	var br BoardRef
+	if err := json.Unmarshal([]byte(`{"fid":"428","stid":"29182350","name":"评测/安利"}`), &br); err != nil {
+		t.Fatalf("解析失败: %v", err)
+	}
+	if br.Key() != "29182350" || br.Name != "评测/安利" {
+		t.Fatalf("新格式解析不对: %+v", br)
+	}
+}

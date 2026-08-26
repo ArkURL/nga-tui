@@ -265,7 +265,7 @@ func TestSessionPersistRoundTrip(t *testing.T) {
 		"_ga":            "GA1.1",
 	}
 	client.SetCookies(cookies)
-	persistAll(client.Cookies(), map[string]bool{"7": true})
+	persistAll(client.Cookies(), map[string]model.BoardRef{"7": {FID: "7", Name: "版7"}})
 
 	// 模拟重启：从配置读取
 	cfg, err := config.Load()
@@ -278,7 +278,7 @@ func TestSessionPersistRoundTrip(t *testing.T) {
 	if cfg.Cookies["_ga"] != "GA1.1" {
 		t.Fatalf("应保留完整 cookie 集: %+v", cfg.Cookies)
 	}
-	if len(cfg.Favorites) != 1 || cfg.Favorites[0] != "7" {
+	if len(cfg.Favorites) != 1 || cfg.Favorites[0].Key() != "7" {
 		t.Fatalf("收藏未持久化: %+v", cfg.Favorites)
 	}
 }

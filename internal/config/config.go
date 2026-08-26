@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/ArkURL/nga-tui/internal/model"
 )
 
 // saveMu 保护配置文件的并发读写，避免多个请求同时持久化时写坏文件。
@@ -15,7 +17,7 @@ var saveMu sync.Mutex
 type Config struct {
 	UA        string            `json:"ua,omitempty"`
 	Cookies   map[string]string `json:"cookies"`
-	Favorites []string          `json:"favorites,omitempty"` // 收藏版面 fid 列表
+	Favorites []model.BoardRef  `json:"favorites,omitempty"` // 收藏版面（兼容旧 fid 字符串）
 }
 
 // Dir 返回配置目录（~/.config/nga-tui），不存在则创建。

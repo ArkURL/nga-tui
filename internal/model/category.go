@@ -52,6 +52,14 @@ func (f *Forum) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// BoardKey 返回版面键：stid 优先（合集），否则 fid。
+func (f Forum) BoardKey() string {
+	if f.STID != "" {
+		return f.STID
+	}
+	return f.FID
+}
+
 // rawToString 把 json.RawMessage 转为字符串，兼容数字、字符串、空值。
 func rawToString(raw json.RawMessage) string {
 	if len(raw) == 0 {

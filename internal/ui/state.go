@@ -42,15 +42,18 @@ type State struct {
 	LoggedIn bool
 
 	Categories []model.Category
-	// Favorites 收藏的版面 fid。
-	Favorites map[string]bool
+	// Favorites 收藏的版面（键为 BoardRef.Key()，即 stid 或 fid）。
+	Favorites map[string]model.BoardRef
 
 	// 帖子列表状态
 	CurrentForum *model.Forum
 	Threads      []model.Thread
-	ListPage     int
-	ListPages    int
-	ListOrderBy  string
+	SubForums    []model.SubForum // 当前版面的子版面/合集
+	// BoardStack 钻取栈：进入子版面时压入当前版面，返回时弹出。
+	BoardStack  []model.Forum
+	ListPage    int
+	ListPages   int
+	ListOrderBy string
 	// ListSearchKey 非空表示当前列表是搜索结果。
 	ListSearchKey string
 	// ListReload 进入帖子列表视图时需要重新加载（切版面/新搜索时为 true；
@@ -70,7 +73,7 @@ func NewState(client *api.Client) *State {
 	return &State{
 		Client:      client,
 		ListOrderBy: "lastpostdesc",
-		Favorites:   map[string]bool{},
+		Favorites:   map[string]model.BoardRef{},
 	}
 }
 

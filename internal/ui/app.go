@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -32,8 +33,8 @@ type App struct {
 	height int
 }
 
-// NewApp 创建根 model。loggedIn 表示启动时已恢复有效会话，favorites 是持久化的收藏版面 fid。
-func NewApp(client *api.Client, loggedIn bool, favorites []string) *App {
+// NewApp 创建根 model。loggedIn 表示启动时已恢复有效会话，favorites 是持久化的收藏版面。
+func NewApp(client *api.Client, loggedIn bool, favorites []model.BoardRef) *App {
 	a := &App{
 		screen: ScreenForum,
 		state:  NewState(client),
@@ -45,10 +46,10 @@ func NewApp(client *api.Client, loggedIn bool, favorites []string) *App {
 		help:   newHelpModel(),
 	}
 	a.state.LoggedIn = loggedIn
-	a.state.Favorites = map[string]bool{}
-	for _, fid := range favorites {
-		if fid != "" {
-			a.state.Favorites[fid] = true
+	a.state.Favorites = map[string]model.BoardRef{}
+	for _, ref := range favorites {
+		if ref.Key() != "" {
+			a.state.Favorites[ref.Key()] = ref
 		}
 	}
 	// 已有收藏时，启动首页直接显示收藏版面
@@ -83,7 +84,7 @@ func (a *App) logout() {
 }
 
 // persistAll 把当前 cookie 与收藏写入配置文件。
-func persistAll(cookies map[string]string, favs map[string]bool) {
+func persistAll(cookies map[string]string, favs map[string]model.BoardRef) {
 	debug.Logf("持久化配置: cookie名=%v 收藏数=%d", cookieNames(cookies), len(favs))
 	cfg := &config.Config{Cookies: cookies, Favorites: favoriteList(favs)}
 	_ = config.Save(cfg)
@@ -98,14 +99,13 @@ func cookieNames(cookies map[string]string) []string {
 	return out
 }
 
-// favoriteList 把收藏 map 转为有序列表。
-func favoriteList(favs map[string]bool) []string {
-	out := make([]string, 0, len(favs))
-	for fid := range favs {
-		if favs[fid] {
-			out = append(out, fid)
-		}
+// favoriteList 把收藏 map 转为有序列表（按 Key 排序，保证确定性）。
+func favoriteList(favs map[string]model.BoardRef) []model.BoardRef {
+	out := make([]model.BoardRef, 0, len(favs))
+	for _, ref := range favs {
+		out = append(out, ref)
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Key() < out[j].Key() })
 	return out
 }
 
@@ -300,7 +300,7 @@ func (a *App) footer() string {
 	if a.screen == ScreenForum {
 		hints = append(hints, "Enter 进版面", "f 收藏", "Tab 收藏/全部", "/ 搜版面", "L 登录", "q 退出")
 	} else if a.screen == ScreenThreadList {
-		hints = append(hints, "Enter 看帖", "n/p 翻页", "/ 搜帖", "e 排序", "q 返回")
+		hints = append(hints, "Enter 进入", "f 收藏", "n/p 翻页", "/ 搜帖", "e 排序", "q 返回")
 	} else if a.screen == ScreenReader {
 		hints = append(hints, "j/k 按楼跳转", "Shift+J/K 细调", "n/p 翻页", "q 返回")
 	}

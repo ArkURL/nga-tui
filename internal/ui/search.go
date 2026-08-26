@@ -128,10 +128,11 @@ func (m searchModel) updateResults(msg tea.KeyMsg) (searchModel, tea.Cmd) {
 	case keyMatches(msg, km.Favorite):
 		if len(m.results) > 0 && m.st != nil {
 			f := m.results[m.cursor]
-			if m.st.Favorites[f.FID] {
-				delete(m.st.Favorites, f.FID)
+			k := f.BoardKey()
+			if _, ok := m.st.Favorites[k]; ok {
+				delete(m.st.Favorites, k)
 			} else {
-				m.st.Favorites[f.FID] = true
+				m.st.Favorites[k] = model.BoardRef{FID: f.FID, STID: f.STID, Name: f.Name}
 			}
 			persistAll(m.st.Client.Cookies(), m.st.Favorites)
 		}
@@ -183,8 +184,10 @@ func (m searchModel) View() string {
 			sb.WriteString(fmt.Sprintf("  %s\n\n", dimStyle.Render(fmt.Sprintf("匹配 %d 个版面，回车进入 · f 收藏", len(m.results)))))
 			for i, f := range m.results {
 				mark := "  "
-				if m.st != nil && m.st.Favorites[f.FID] {
-					mark = "★ "
+				if m.st != nil {
+					if _, ok := m.st.Favorites[f.BoardKey()]; ok {
+						mark = "★ "
+					}
 				}
 				line := "    " + mark + f.Name
 				if f.Info != "" {
