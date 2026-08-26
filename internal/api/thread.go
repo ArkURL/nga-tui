@@ -25,6 +25,8 @@ type ThreadListResult struct {
 	OrderBy string
 	// SubForums 当前版面的子版面/合集（来自 __F.sub_forums）。
 	SubForums []model.SubForum
+	// BoardName 当前版面的真实名称（来自 __F，直达时用于回填标题与收藏名）。
+	BoardName string
 }
 
 // GetThreads 拉取版面的帖子列表；keyword 非空时执行版内搜索。
@@ -66,11 +68,16 @@ func (c *Client) GetThreads(fid, stid string, page int, orderBy, keyword string)
 				return fmt.Errorf("解析帖子列表 __T: %w", err)
 			}
 		}
-		// __F.sub_forums 是当前版面的子版面/合集
+		// __F 是当前版面的元数据：子版面/合集 + 真实版面名
 		if fRaw, ok := data["__F"]; ok {
 			var fmap map[string]json.RawMessage
 			if json.Unmarshal(fRaw, &fmap) == nil {
 				res.SubForums = parseSubForums(fmap["sub_forums"])
+				// 合集用 set_topic_subject，普通版面用 name（直达时可能只有 id）
+				res.BoardName = strFromRaw(fmap["set_topic_subject"])
+				if res.BoardName == "" {
+					res.BoardName = strFromRaw(fmap["name"])
+				}
 			}
 		}
 		return nil

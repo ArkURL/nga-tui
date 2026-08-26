@@ -121,9 +121,13 @@ func (m threadListModel) Update(msg tea.Msg) (threadListModel, tea.Cmd) {
 		}
 		m.state = listReady
 		m.st.Threads = msg.res.Threads
-		m.st.SubForums = msg.res.SubForums
+		m.st.SubForums = filterSelfSubForums(msg.res.SubForums, m.st.CurrentForum)
 		m.st.ListPage = msg.res.Page
 		m.st.ListPages = msg.res.Pages
+		// 直达/钻取时版面名可能只是 id，用响应里的真实名称回填（标题与收藏名）
+		if msg.res.BoardName != "" && m.st.CurrentForum != nil {
+			m.st.CurrentForum.Name = msg.res.BoardName
+		}
 		m.cursor = 0
 		m.syncViewport()
 		return m, nil
@@ -228,6 +232,25 @@ func (m *threadListModel) subCount() int {
 		return 0
 	}
 	return len(m.st.SubForums)
+}
+
+// filterSelfSubForums 过滤掉指向当前版面自身的子版面（合集打开时 __F.sub_forums
+// 可能包含自己，避免无限自钻取）。
+func filterSelfSubForums(subs []model.SubForum, cur *model.Forum) []model.SubForum {
+	if cur == nil {
+		return subs
+	}
+	curKey := cur.STID
+	if curKey == "" {
+		curKey = cur.FID
+	}
+	out := subs[:0]
+	for _, sf := range subs {
+		if sf.ID != curKey {
+			out = append(out, sf)
+		}
+	}
+	return out
 }
 
 // gotoPage 跳转页面（超出范围时忽略）。

@@ -177,3 +177,45 @@ func TestSearchGotoSubmitNavigates(t *testing.T) {
 		t.Fatalf("期望直达合集 stid=47206901，得到 %+v", nav.Payload)
 	}
 }
+
+func TestListBackfillsBoardName(t *testing.T) {
+	app := NewApp(api.NewClient(), false, nil)
+	app.list.st = app.state
+	// 直达时版面名只是 id
+	app.state.CurrentForum = &model.Forum{STID: "47206901", Name: "47206901"}
+	app.list, _ = app.list.Update(threadsLoadedMsg{fid: "", stid: "47206901", key: "", res: &api.ThreadListResult{
+		BoardName: "[股市]技术分析",
+		Threads:   []model.Thread{{TID: 1}},
+	}, err: nil})
+	if app.state.CurrentForum.Name != "[股市]技术分析" {
+		t.Fatalf("版面名应回填为真实名称，得到 %q", app.state.CurrentForum.Name)
+	}
+}
+
+func TestFilterSelfSubForums(t *testing.T) {
+	subs := []model.SubForum{
+		{ID: "863", Name: "手机游戏快讯"},
+		{ID: "47206901", Name: "[股市]技术分析", IsCollection: true},
+	}
+	cur := &model.Forum{FID: "510567", STID: "47206901"}
+	out := filterSelfSubForums(subs, cur)
+	if len(out) != 1 || out[0].ID != "863" {
+		t.Fatalf("应过滤掉指向自身的合集，得到 %+v", out)
+	}
+}
+
+func TestGotoBoardFavoriteUsesRealName(t *testing.T) {
+	app := NewApp(api.NewClient(), false, nil)
+	app.list.st = app.state
+	// 直达合集 → 加载后名称回填 → 列表内 f 收藏
+	app.state.CurrentForum = &model.Forum{STID: "47206901", Name: "47206901"}
+	app.list, _ = app.list.Update(threadsLoadedMsg{fid: "", stid: "47206901", key: "", res: &api.ThreadListResult{
+		BoardName: "[股市]技术分析",
+		Threads:   []model.Thread{{TID: 1}},
+	}, err: nil})
+	_, _ = app.list.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	ref, ok := app.state.Favorites["47206901"]
+	if !ok || ref.STID != "47206901" || ref.Name != "[股市]技术分析" {
+		t.Fatalf("收藏应使用回填后的真实名称，得到 %+v", ref)
+	}
+}

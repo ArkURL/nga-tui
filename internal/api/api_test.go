@@ -271,3 +271,34 @@ func TestParseSubForums(t *testing.T) {
 		t.Fatal("缺失应返回 nil")
 	}
 }
+
+func TestGetThreadsBoardName(t *testing.T) {
+	var body string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(body))
+	}))
+	defer ts.Close()
+	c := NewClient()
+	c.base = ts.URL
+	c.minInterval = 0
+
+	// 合集：用 set_topic_subject 作为版面名
+	body = `{"data":{"__ROWS":1,"__T":[],"__F":{"fid":510567,"name":"杂谈","set_topic_subject":"[股市]技术分析","sub_forums":null}}}`
+	res, err := c.GetThreads("", "47206901", 1, "lastpostdesc", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.BoardName != "[股市]技术分析" {
+		t.Fatalf("合集应取 set_topic_subject，得到 %q", res.BoardName)
+	}
+
+	// 普通版面：用 name
+	body = `{"data":{"__ROWS":1,"__T":[],"__F":{"fid":7,"name":"艾泽拉斯议事厅","sub_forums":null}}}`
+	res, err = c.GetThreads("7", "", 1, "lastpostdesc", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.BoardName != "艾泽拉斯议事厅" {
+		t.Fatalf("普通版面应取 name，得到 %q", res.BoardName)
+	}
+}
