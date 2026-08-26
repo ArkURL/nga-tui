@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -21,7 +22,9 @@ func TestListDrillDownIntoSubforum(t *testing.T) {
 		Threads: []model.Thread{{TID: 1, Subject: "帖子1"}},
 		Page:    1, Pages: 1,
 	}, err: nil})
-	app.list.cursor = 1 // 选中合集
+	// 切到子版面视图，选中合集
+	app.list.showSubs = true
+	app.list.cursor = 1
 
 	_, cmd := app.list.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
@@ -35,6 +38,48 @@ func TestListDrillDownIntoSubforum(t *testing.T) {
 	if app.state.CurrentForum == nil || app.state.CurrentForum.STID != "29182350" ||
 		app.state.CurrentForum.Name != "评测/安利" {
 		t.Fatalf("CurrentForum 应为合集，得到 %+v", app.state.CurrentForum)
+	}
+}
+
+func TestListToggleSubsView(t *testing.T) {
+	app := NewApp(api.NewClient(), false, nil)
+	app.list.st = app.state
+	app.state.CurrentForum = &model.Forum{FID: "428", Name: "手游综合"}
+	app.list, _ = app.list.Update(threadsLoadedMsg{fid: "428", key: "", res: &api.ThreadListResult{
+		SubForums: []model.SubForum{{ID: "863", Name: "手机游戏快讯"}},
+		Threads:   []model.Thread{{TID: 1, Subject: "帖子1"}},
+	}, err: nil})
+	app.list.width = 80
+	// 默认帖子视图：Enter 开帖
+	_, cmd := app.list.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if nav, ok := cmd().(NavigateMsg); !ok || nav.Screen != ScreenReader {
+		t.Fatalf("帖子视图 Enter 应开帖，得到 %+v", cmd())
+	}
+
+	// 按 t 切到子版面视图
+	app.list, _ = app.list.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	if !app.list.showSubs {
+		t.Fatal("按 t 应切到子版面视图")
+	}
+	if !strings.Contains(app.list.renderList(), "手机游戏快讯") {
+		t.Fatal("子版面视图应显示子版面")
+	}
+	// 帖子视图不应混入子版面
+	app.list, _ = app.list.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	if strings.Contains(app.list.renderList(), "手机游戏快讯") {
+		t.Fatal("帖子视图不应显示子版面")
+	}
+	// 子版面视图 Enter 应钻取
+	app.list, _ = app.list.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	_, cmd = app.list.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if nav, ok := cmd().(NavigateMsg); !ok || nav.Screen != ScreenThreadList {
+		t.Fatalf("子版面视图 Enter 应钻取，得到 %+v", cmd())
+	}
+
+	// 再按 t 切回帖子视图
+	app.list, _ = app.list.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	if app.list.showSubs {
+		t.Fatal("再次按 t 应切回帖子视图")
 	}
 }
 
@@ -90,7 +135,8 @@ func TestListFavoriteSubforum(t *testing.T) {
 		SubForums: []model.SubForum{{ID: "29182350", Name: "评测/安利", IsCollection: true}},
 		Threads:   []model.Thread{{TID: 1}},
 	}, err: nil})
-	app.list.cursor = 0 // 光标在子版面
+	app.list.showSubs = true // 切到子版面视图
+	app.list.cursor = 0
 
 	_, _ = app.list.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
 	ref, ok := app.state.Favorites["29182350"]

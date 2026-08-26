@@ -339,7 +339,16 @@ func (a *App) footer() string {
 	if a.screen == ScreenForum {
 		hints = append(hints, "Enter 进版面", "f 收藏", "o 直达", "Tab 收藏/全部", "/ 搜版面", "L 登录", "q 退出")
 	} else if a.screen == ScreenThreadList {
-		hints = append(hints, "Enter 进入", "f 收藏", "n/p 翻页", "/ 搜帖", "e 排序", "q 返回")
+		if a.state.ListSearchKey == "" && len(a.state.SubForums) > 0 {
+			if a.list.showSubs {
+				hints = append(hints, "t 帖子", "Enter 进入子版面")
+			} else {
+				hints = append(hints, "t 子版面", "Enter 看帖")
+			}
+		} else {
+			hints = append(hints, "Enter 看帖")
+		}
+		hints = append(hints, "f 收藏", "n/p 翻页", "/ 搜帖", "e 排序", "q 返回")
 	} else if a.screen == ScreenReader {
 		hints = append(hints, "j/k 按楼跳转", "Shift+J/K 细调", "n/p 翻页", "q 返回")
 	}

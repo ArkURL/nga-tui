@@ -30,7 +30,9 @@ type threadListModel struct {
 	vp     viewport.Model
 	err    error
 	cursor int
-	// cursorLines 记录每个可选中项（子版面+帖子）首行在渲染内容中的行号。
+	// showSubs 为 true 时显示子版面列表（默认帖子视图，按 t 切换）。
+	showSubs bool
+	// cursorLines 记录每个可选中项首行在渲染内容中的行号。
 	cursorLines []int
 }
 
@@ -129,6 +131,7 @@ func (m threadListModel) Update(msg tea.Msg) (threadListModel, tea.Cmd) {
 			m.st.CurrentForum.Name = msg.res.BoardName
 		}
 		m.cursor = 0
+		m.showSubs = false // 新加载默认回到帖子视图
 		m.syncViewport()
 		return m, nil
 
@@ -152,8 +155,8 @@ func (m threadListModel) handleKey(msg tea.KeyMsg) (threadListModel, tea.Cmd) {
 		}
 	case keyMatches(msg, km.Enter):
 		if m.state == listReady && len(m.cursorLines) > 0 {
-			if m.cursor < m.subCount() {
-				// 钻取子版面/合集
+			if m.showSubs {
+				// 子版面视图：钻取子版面/合集
 				sf := m.st.SubForums[m.cursor]
 				if m.st.CurrentForum != nil {
 					m.st.BoardStack = append(m.st.BoardStack, *m.st.CurrentForum)
@@ -165,11 +168,21 @@ func (m threadListModel) handleKey(msg tea.KeyMsg) (threadListModel, tea.Cmd) {
 				}
 				return m, navCmd(ScreenThreadList, target)
 			}
-			th := m.st.Threads[m.cursor-m.subCount()]
+			th := m.st.Threads[m.cursor]
 			return m, navCmd(ScreenReader, th)
 		}
+	case keyMatches(msg, km.ToggleSubs):
+		// 子版面/帖子 视图切换（搜索时无子版面）
+		if m.state == listReady && m.st != nil && m.st.ListSearchKey == "" && len(m.st.SubForums) > 0 {
+			m.showSubs = !m.showSubs
+			m.cursor = 0
+		}
 	case keyMatches(msg, km.Back):
-		if n := len(m.st.BoardStack); n > 0 {
+		if m.showSubs {
+			// 子版面视图先切回帖子视图
+			m.showSubs = false
+			m.cursor = 0
+		} else if n := len(m.st.BoardStack); n > 0 {
 			// 弹出父版面并重载
 			parent := m.st.BoardStack[n-1]
 			m.st.BoardStack = m.st.BoardStack[:n-1]
@@ -177,14 +190,14 @@ func (m threadListModel) handleKey(msg tea.KeyMsg) (threadListModel, tea.Cmd) {
 			m.st.ListSearchKey = ""
 			m.st.ListPage = 1
 			return m, m.start()
+		} else {
+			return m, navCmd(ScreenForum, nil)
 		}
-		return m, navCmd(ScreenForum, nil)
 	case keyMatches(msg, km.Favorite):
 		if m.state == listReady && m.st != nil {
-			sub := m.subCount()
 			var ref model.BoardRef
 			var name string
-			if m.cursor < sub {
+			if m.showSubs {
 				ref = m.st.SubForums[m.cursor].BoardRef()
 				name = m.st.SubForums[m.cursor].Name
 			} else if cur := m.st.CurrentForum; cur != nil {
@@ -238,12 +251,9 @@ func (m threadListModel) handleKey(msg tea.KeyMsg) (threadListModel, tea.Cmd) {
 	return m, nil
 }
 
-// subCount 返回当前列表中可钻取的子版面数量（搜索时隐藏子版面）。
-func (m *threadListModel) subCount() int {
-	if m.st == nil || m.st.ListSearchKey != "" {
-		return 0
-	}
-	return len(m.st.SubForums)
+// hasSubForums 判断当前版面是否带子版面（搜索时不算）。
+func (m *threadListModel) hasSubForums() bool {
+	return m.st != nil && m.st.ListSearchKey == "" && len(m.st.SubForums) > 0
 }
 
 // filterSelfSubForums 过滤掉指向当前版面自身的子版面（合集打开时 __F.sub_forums
@@ -320,33 +330,38 @@ func (m threadListModel) View() string {
 			dimStyle.Render(hint),
 		)
 	}
-	if len(m.st.SubForums) == 0 && len(m.st.Threads) == 0 {
+	if m.showSubs {
+		if len(m.st.SubForums) == 0 {
+			return "\n  " + dimStyle.Render("该版面没有子版面")
+		}
+	} else if len(m.st.Threads) == 0 {
 		return "\n  " + dimStyle.Render("没有帖子")
 	}
 	return m.vp.View()
 }
 
-// renderList 渲染帖子列表（首行为版面标题头，随后是可钻取的子版面区与帖子区）。
+// renderList 渲染当前视图：默认帖子列表，showSubs 时只渲染子版面列表。
 func (m *threadListModel) renderList() string {
 	var sb strings.Builder
 	line := 0
 	m.cursorLines = m.cursorLines[:0]
 	if m.st.CurrentForum != nil {
 		title := m.st.CurrentForum.Name
-		if m.st.ListSearchKey != "" {
-			title += " · 搜索 \"" + m.st.ListSearchKey + "\""
+		if m.showSubs {
+			title += " · 子版面"
+		} else {
+			if m.st.ListSearchKey != "" {
+				title += " · 搜索 \"" + m.st.ListSearchKey + "\""
+			}
+			title += fmt.Sprintf("  %d/%d 页", m.st.ListPage, m.st.ListPages)
 		}
-		title += fmt.Sprintf("  %d/%d 页", m.st.ListPage, m.st.ListPages)
 		sb.WriteString(truncateLine(headerStyle.Render(" "+title), m.width))
 		sb.WriteString("\n\n")
 		line += 2
 	}
 
-	// 子版面区（搜索时隐藏）
-	if m.st.ListSearchKey == "" && len(m.st.SubForums) > 0 {
-		sb.WriteString("  " + dimStyle.Render("── 子版面 ──"))
-		sb.WriteString("\n")
-		line++
+	if m.showSubs {
+		// 子版面视图：每项 1 行
 		for _, sf := range m.st.SubForums {
 			name := sf.Name
 			if sf.IsCollection {
@@ -366,11 +381,10 @@ func (m *threadListModel) renderList() string {
 			sb.WriteString("\n")
 			line++
 		}
-		sb.WriteString("\n")
-		line++
+		return sb.String()
 	}
 
-	// 帖子区
+	// 帖子视图：每帖 2 行（标题 + meta）
 	for _, th := range m.st.Threads {
 		var l string
 		idx := len(m.cursorLines)
