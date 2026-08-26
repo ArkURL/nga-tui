@@ -140,12 +140,18 @@ func (m searchModel) updateResults(msg tea.KeyMsg) (searchModel, tea.Cmd) {
 		if len(m.results) > 0 && m.st != nil {
 			f := m.results[m.cursor]
 			k := f.BoardKey()
+			added := false
 			if _, ok := m.st.Favorites[k]; ok {
 				delete(m.st.Favorites, k)
 			} else {
 				m.st.Favorites[k] = model.BoardRef{FID: f.FID, STID: f.STID, Name: f.Name}
+				added = true
 			}
 			persistAll(m.st.Client.Cookies(), m.st.Favorites)
+			if added {
+				return m, statusCmd("已收藏「" + f.Name + "」")
+			}
+			return m, statusCmd("已取消收藏「" + f.Name + "」")
 		}
 	case keyMatches(msg, km.Search):
 		m.showResults = false

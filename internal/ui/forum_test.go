@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -183,5 +184,46 @@ func TestAppStartupFavOnly(t *testing.T) {
 	app2 := NewApp(api.NewClient(), false, nil)
 	if app2.forum.favOnly {
 		t.Fatal("无收藏时启动应显示全部版面")
+	}
+}
+
+func TestForumFavoriteShowsStatus(t *testing.T) {
+	app := NewApp(api.NewClient(), false, nil)
+	app.forum.st = app.state
+	app.forum.state = forumReady
+	app.forum.st.Categories = sampleCategories()
+	app.forum.items = buildForumItems(sampleCategories())
+	app.forum.selIdx = selectableIndices(app.forum.items)
+	app.forum.cursor = 1 // 版面2
+
+	_, cmd := app.forum.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	msg := cmd()
+	sm, ok := msg.(statusMsg)
+	if !ok || !strings.Contains(sm.text, "已收藏") || !strings.Contains(sm.text, "版面2") {
+		t.Fatalf("期望「已收藏」状态提示，得到 %+v", msg)
+	}
+	// 再按一次 → 取消收藏
+	_, cmd2 := app.forum.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	sm2, ok := cmd2().(statusMsg)
+	if !ok || !strings.Contains(sm2.text, "已取消") {
+		t.Fatalf("期望「已取消收藏」状态提示，得到 %+v", cmd2())
+	}
+}
+
+func TestStatusClearSequence(t *testing.T) {
+	app := NewApp(api.NewClient(), false, nil)
+	_, _ = app.Update(statusMsg{text: "新提示"})
+	if app.status != "新提示" {
+		t.Fatalf("statusMsg 应设置状态，得到 %q", app.status)
+	}
+	// 过期清除（旧 seq）不应生效
+	_, _ = app.Update(statusClearMsg{seq: app.statusSeq - 1})
+	if app.status != "新提示" {
+		t.Fatalf("过期清除不应生效，得到 %q", app.status)
+	}
+	// 匹配 seq 的清除应生效
+	_, _ = app.Update(statusClearMsg{seq: app.statusSeq})
+	if app.status != "" {
+		t.Fatalf("匹配清除应清空，得到 %q", app.status)
 	}
 }

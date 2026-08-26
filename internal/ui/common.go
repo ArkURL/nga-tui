@@ -76,6 +76,17 @@ const (
 	searchScopeGoto
 )
 
+// statusMsg 是瞬态状态提示（如"已收藏「xxx」"），由视图发送、App 统一渲染到底栏。
+type statusMsg struct{ text string }
+
+// statusClearMsg 清除状态提示，携带序号以丢弃过期的清除（新的提示会递增序号）。
+type statusClearMsg struct{ seq int }
+
+// statusCmd 生成发送状态提示的命令。
+func statusCmd(text string) tea.Cmd {
+	return func() tea.Msg { return statusMsg{text: text} }
+}
+
 // formatTime 把 unix 时间戳格式化为 "01-02 15:04"。
 func formatTime(ts int64) string {
 	if ts <= 0 {

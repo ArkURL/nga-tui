@@ -181,14 +181,23 @@ func (m forumModel) handleKey(msg tea.KeyMsg) (forumModel, tea.Cmd) {
 		if m.state == forumReady && len(m.selIdx) > 0 && m.st != nil {
 			f := m.items[m.selIdx[m.cursor]].forum
 			k := f.BoardKey()
+			added := false
 			if _, ok := m.st.Favorites[k]; ok {
 				delete(m.st.Favorites, k)
 			} else {
 				m.st.Favorites[k] = model.BoardRef{FID: f.FID, STID: f.STID, Name: f.Name}
+				added = true
 			}
 			persistAll(m.st.Client.Cookies(), m.st.Favorites)
 			m.rebuild()
-			return m, nil
+			name := f.Name
+			if name == "" {
+				name = k
+			}
+			if added {
+				return m, statusCmd("已收藏「" + name + "」")
+			}
+			return m, statusCmd("已取消收藏「" + name + "」")
 		}
 	case keyMatches(msg, km.ToggleForum):
 		if m.state == forumReady {

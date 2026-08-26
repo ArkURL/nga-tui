@@ -28,6 +28,10 @@ var (
 			Bold(true).
 			Foreground(accentColor)
 
+	accentStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(accentColor)
+
 	selectedStyle = lipgloss.NewStyle().
 			Background(selectedColor).
 			Foreground(accentColor).

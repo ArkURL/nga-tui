@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -28,6 +29,10 @@ type App struct {
 
 	// lastNonHelp 记录进入帮助前的视图，用于返回。
 	lastNonHelp Screen
+
+	// status 是瞬态状态提示（如收藏成功），statusSeq 用于丢弃过期的清除。
+	status    string
+	statusSeq int
 
 	width  int
 	height int
@@ -116,6 +121,20 @@ func (a *App) Init() tea.Cmd {
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case statusMsg:
+		// 新的状态提示：递增序号并安排清除
+		a.statusSeq++
+		seq := a.statusSeq
+		a.status = msg.text
+		return a, tea.Tick(2*time.Second, func(time.Time) tea.Msg { return statusClearMsg{seq: seq} })
+
+	case statusClearMsg:
+		// 只清除仍属于最新提示的状态，避免旧清除抹掉新提示
+		if msg.seq == a.statusSeq {
+			a.status = ""
+		}
+		return a, nil
+
 	case tea.WindowSizeMsg:
 		a.width, a.height = msg.Width, msg.Height
 		return a, a.route(msg)
@@ -293,6 +312,9 @@ func (a *App) footer() string {
 		if a.state.ReadPages > 0 {
 			left += dimStyle.Render(fmt.Sprintf(" %d/%d 页", a.state.ReadPage, a.state.ReadPages))
 		}
+	}
+	if a.status != "" {
+		left += " " + accentStyle.Render(a.status)
 	}
 
 	right := strings.Builder{}

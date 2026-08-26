@@ -183,18 +183,30 @@ func (m threadListModel) handleKey(msg tea.KeyMsg) (threadListModel, tea.Cmd) {
 		if m.state == listReady && m.st != nil {
 			sub := m.subCount()
 			var ref model.BoardRef
+			var name string
 			if m.cursor < sub {
 				ref = m.st.SubForums[m.cursor].BoardRef()
+				name = m.st.SubForums[m.cursor].Name
 			} else if cur := m.st.CurrentForum; cur != nil {
 				ref = model.BoardRef{FID: cur.FID, STID: cur.STID, Name: cur.Name}
+				name = cur.Name
 			}
 			if ref.Key() != "" {
+				added := false
 				if _, ok := m.st.Favorites[ref.Key()]; ok {
 					delete(m.st.Favorites, ref.Key())
 				} else {
 					m.st.Favorites[ref.Key()] = ref
+					added = true
 				}
 				persistAll(m.st.Client.Cookies(), m.st.Favorites)
+				if name == "" {
+					name = ref.Key()
+				}
+				if added {
+					return m, statusCmd("已收藏「" + name + "」")
+				}
+				return m, statusCmd("已取消收藏「" + name + "」")
 			}
 		}
 	case keyMatches(msg, km.NextPg):
