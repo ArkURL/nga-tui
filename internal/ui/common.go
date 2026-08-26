@@ -72,6 +72,8 @@ const (
 	searchScopeForum searchScope = iota
 	// searchScopeThread 在当前版面内搜索帖子。
 	searchScopeThread
+	// searchScopeGoto 粘贴链接或 fid/stid 直达版面。
+	searchScopeGoto
 )
 
 // formatTime 把 unix 时间戳格式化为 "01-02 15:04"。

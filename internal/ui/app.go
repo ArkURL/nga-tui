@@ -298,7 +298,7 @@ func (a *App) footer() string {
 	right := strings.Builder{}
 	hints := []string{}
 	if a.screen == ScreenForum {
-		hints = append(hints, "Enter 进版面", "f 收藏", "Tab 收藏/全部", "/ 搜版面", "L 登录", "q 退出")
+		hints = append(hints, "Enter 进版面", "f 收藏", "o 直达", "Tab 收藏/全部", "/ 搜版面", "L 登录", "q 退出")
 	} else if a.screen == ScreenThreadList {
 		hints = append(hints, "Enter 进入", "f 收藏", "n/p 翻页", "/ 搜帖", "e 排序", "q 返回")
 	} else if a.screen == ScreenReader {

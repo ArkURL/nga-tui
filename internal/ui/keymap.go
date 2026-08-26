@@ -9,6 +9,7 @@ type keyMap struct {
 	Enter       key.Binding
 	Back        key.Binding
 	Search      key.Binding
+	Goto        key.Binding
 	NextPg      key.Binding
 	PrevPg      key.Binding
 	Top         key.Binding
@@ -31,6 +32,7 @@ func newKeyMap() keyMap {
 		Enter:       key.NewBinding(key.WithKeys("enter", "l"), key.WithHelp("Enter", "进入")),
 		Back:        key.NewBinding(key.WithKeys("esc", "h", "q"), key.WithHelp("Esc/h/q", "返回")),
 		Search:      key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "搜索")),
+		Goto:        key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "直达版面（粘贴链接/fid/stid）")),
 		NextPg:      key.NewBinding(key.WithKeys("n", "pgdown", "ctrlf"), key.WithHelp("n/PgDn", "下一页")),
 		PrevPg:      key.NewBinding(key.WithKeys("p", "pgup", "ctrlb"), key.WithHelp("p/PgUp", "上一页")),
 		Top:         key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "顶部")),

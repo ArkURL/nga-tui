@@ -175,6 +175,8 @@ func (m forumModel) handleKey(msg tea.KeyMsg) (forumModel, tea.Cmd) {
 		}
 	case keyMatches(msg, km.Search):
 		return m, navCmd(ScreenSearch, searchScopeForum)
+	case keyMatches(msg, km.Goto):
+		return m, navCmd(ScreenSearch, searchScopeGoto)
 	case keyMatches(msg, km.Favorite):
 		if m.state == forumReady && len(m.selIdx) > 0 && m.st != nil {
 			f := m.items[m.selIdx[m.cursor]].forum

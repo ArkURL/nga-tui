@@ -36,9 +36,12 @@ func (m searchModel) Init() tea.Cmd { return nil }
 
 // reset 重置搜索输入并聚焦（指针方法，App 导航时调用）。
 func (m *searchModel) reset() tea.Cmd {
-	if m.scope == searchScopeForum {
+	switch m.scope {
+	case searchScopeForum:
 		m.input.Placeholder = "输入版面名称（如 魔兽）"
-	} else {
+	case searchScopeGoto:
+		m.input.Placeholder = "粘贴 NGA 链接或填 fid/stid，如 stid=47206901"
+	default:
 		m.input.Placeholder = "输入关键字，在当前版面内搜帖"
 	}
 	m.showResults = false
@@ -91,6 +94,14 @@ func (m searchModel) submit() (searchModel, tea.Cmd) {
 	if kw == "" {
 		return m, nil
 	}
+	if m.scope == searchScopeGoto {
+		f, err := parseGotoBoard(kw)
+		if err != nil {
+			m.err = err
+			return m, nil
+		}
+		return m, navCmd(ScreenThreadList, f)
+	}
 	if m.scope == searchScopeThread {
 		// 版内搜帖：设置搜索状态并标记需要重新加载
 		m.st.ListSearchKey = kw
@@ -142,6 +153,48 @@ func (m searchModel) updateResults(msg tea.KeyMsg) (searchModel, tea.Cmd) {
 	return m, nil
 }
 
+// parseGotoBoard 解析直达输入：支持完整 NGA 链接、fid=/stid= 参数、裸数字（视为 fid）。
+func parseGotoBoard(s string) (model.Forum, error) {
+	s = strings.TrimSpace(s)
+	lower := strings.ToLower(s)
+	extract := func(key string) string {
+		idx := strings.Index(lower, key+"=")
+		if idx < 0 {
+			return ""
+		}
+		rest := s[idx+len(key)+1:]
+		if i := strings.IndexAny(rest, "&\r\n "); i >= 0 {
+			rest = rest[:i]
+		}
+		return strings.TrimSpace(rest)
+	}
+	// 合集优先（stid），否则 fid
+	if v := extract("stid"); v != "" {
+		return model.Forum{STID: v, Name: v}, nil
+	}
+	if v := extract("fid"); v != "" {
+		return model.Forum{FID: v, Name: v}, nil
+	}
+	if isAllDigits(s) {
+		return model.Forum{FID: s, Name: s}, nil
+	}
+	return model.Forum{}, fmt.Errorf(
+		"无法识别「%s」，请粘贴 NGA 链接（如 bbs.nga.cn/thread.php?stid=47206901）或填 fid/stid", s)
+}
+
+// isAllDigits 判断字符串是否全为数字。
+func isAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // filterForums 在已加载的分类数据中按名称/简介匹配版面。
 func filterForums(cats []model.Category, kw string) []model.Forum {
 	kw = strings.ToLower(kw)
@@ -162,9 +215,12 @@ func filterForums(cats []model.Category, kw string) []model.Forum {
 func (m searchModel) View() string {
 	var sb strings.Builder
 	sb.WriteString("\n")
-	if m.scope == searchScopeForum {
+	switch m.scope {
+	case searchScopeForum:
 		sb.WriteString(titleStyle.Render(" 搜索版面"))
-	} else {
+	case searchScopeGoto:
+		sb.WriteString(titleStyle.Render(" 直达版面"))
+	default:
 		cur := "?"
 		if m.st != nil && m.st.CurrentForum != nil {
 			cur = m.st.CurrentForum.Name

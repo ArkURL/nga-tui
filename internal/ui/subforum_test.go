@@ -109,3 +109,71 @@ func TestFavOnlyShowsSubforum(t *testing.T) {
 		t.Fatalf("收藏视图应显示子版面收藏，得到 %+v", app.forum.items)
 	}
 }
+
+func TestParseGotoBoard(t *testing.T) {
+	cases := []struct {
+		in        string
+		fid, stid string
+		wantErr   bool
+	}{
+		{"stid=47206901", "", "47206901", false},
+		{"https://bbs.nga.cn/thread.php?stid=47206901", "", "47206901", false},
+		{"thread.php?stid=47206901&page=2", "", "47206901", false},
+		{"fid=7", "7", "", false},
+		{"https://bbs.nga.cn/thread.php?fid=-7", "-7", "", false},
+		{"7", "7", "", false},
+		{"hello", "", "", true},
+	}
+	for _, c := range cases {
+		f, err := parseGotoBoard(c.in)
+		if c.wantErr {
+			if err == nil {
+				t.Fatalf("%q 应报错", c.in)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("%q 解析失败: %v", c.in, err)
+		}
+		if f.FID != c.fid || f.STID != c.stid {
+			t.Fatalf("%q → FID=%q STID=%q, 期望 FID=%q STID=%q", c.in, f.FID, f.STID, c.fid, c.stid)
+		}
+	}
+}
+
+func TestForumGotoOpensSearch(t *testing.T) {
+	m := newForumModel()
+	m.state = forumReady
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
+	if cmd == nil {
+		t.Fatal("o 应返回导航 cmd")
+	}
+	msg := cmd()
+	nav, ok := msg.(NavigateMsg)
+	if !ok || nav.Screen != ScreenSearch {
+		t.Fatalf("期望进入搜索视图，得到 %+v", msg)
+	}
+	if nav.Payload != searchScopeGoto {
+		t.Fatalf("期望 goto scope，得到 %v", nav.Payload)
+	}
+}
+
+func TestSearchGotoSubmitNavigates(t *testing.T) {
+	app := NewApp(api.NewClient(), false, nil)
+	app.search.st = app.state
+	app.search.scope = searchScopeGoto
+	app.search.input.SetValue("stid=47206901")
+	_, cmd := app.search.submit()
+	if cmd == nil {
+		t.Fatal("submit 应返回导航 cmd")
+	}
+	msg := cmd()
+	nav, ok := msg.(NavigateMsg)
+	if !ok || nav.Screen != ScreenThreadList {
+		t.Fatalf("期望进入帖子列表，得到 %+v", msg)
+	}
+	f, ok := nav.Payload.(model.Forum)
+	if !ok || f.STID != "47206901" {
+		t.Fatalf("期望直达合集 stid=47206901，得到 %+v", nav.Payload)
+	}
+}
