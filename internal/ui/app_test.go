@@ -433,3 +433,44 @@ func TestForumBackKeepsState(t *testing.T) {
 		t.Fatalf("分类数据不应变化，得到 %d 项", len(app.forum.items))
 	}
 }
+
+func TestPersistAllPreservesLogin(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	// 先写入带登录 cookie 的配置
+	client := api.NewClient()
+	client.SetCookies(map[string]string{"ngaPassportUid": "1", "ngaPassportCid": "token"})
+	persistAll(client.Cookies(), map[string]model.BoardRef{})
+
+	// 模拟访客实例（空 cookie）收藏 → 不应覆盖已保存的登录 cookie
+	persistAll(map[string]string{}, map[string]model.BoardRef{"7": {FID: "7", Name: "版7"}})
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Cookies["ngaPassportUid"] != "1" || cfg.Cookies["ngaPassportCid"] != "token" {
+		t.Fatalf("空 cookie 写入不应覆盖登录 cookie: %+v", cfg.Cookies)
+	}
+	if len(cfg.Favorites) != 1 || cfg.Favorites[0].Key() != "7" {
+		t.Fatalf("收藏应正常写入: %+v", cfg.Favorites)
+	}
+}
+
+func TestLogoutStillClearsLogin(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	client := api.NewClient()
+	client.SetCookies(map[string]string{"ngaPassportUid": "1", "ngaPassportCid": "token"})
+	persistAll(client.Cookies(), map[string]model.BoardRef{})
+
+	// 登出仍应清空 cookie
+	persistAllRaw(map[string]string{}, map[string]model.BoardRef{})
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Cookies) != 0 {
+		t.Fatalf("登出应清空 cookie: %+v", cfg.Cookies)
+	}
+}

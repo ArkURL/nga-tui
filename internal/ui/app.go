@@ -85,14 +85,31 @@ func (a *App) logout() {
 	debug.Logf("执行登出")
 	a.state.Client.SetCookies(map[string]string{})
 	a.state.LoggedIn = false
-	persistAll(map[string]string{}, a.state.Favorites)
+	persistAllRaw(map[string]string{}, a.state.Favorites)
 }
 
-// persistAll 把当前 cookie 与收藏写入配置文件。
+// persistAll 把当前 cookie 与收藏写入配置文件（登录态保护）。
+// 若传入的 cookie 不含有效 passport，而配置里已有登录 cookie，则保留旧的，
+// 防止收藏等操作（或另一个访客实例）意外清掉登录。
 func persistAll(cookies map[string]string, favs map[string]model.BoardRef) {
+	if !hasPassport(cookies) {
+		if prev, err := config.Load(); err == nil && hasPassport(prev.Cookies) {
+			cookies = prev.Cookies
+		}
+	}
+	persistAllRaw(cookies, favs)
+}
+
+// persistAllRaw 直接写入配置（登出等明确要清空 cookie 时用）。
+func persistAllRaw(cookies map[string]string, favs map[string]model.BoardRef) {
 	debug.Logf("持久化配置: cookie名=%v 收藏数=%d", cookieNames(cookies), len(favs))
 	cfg := &config.Config{Cookies: cookies, Favorites: favoriteList(favs)}
 	_ = config.Save(cfg)
+}
+
+// hasPassport 判断 cookie 集是否包含有效的登录护照。
+func hasPassport(cookies map[string]string) bool {
+	return cookies["ngaPassportUid"] != "" && cookies["ngaPassportCid"] != ""
 }
 
 // cookieNames 返回 cookie 的键名列表（不打印值，避免泄露 token）。

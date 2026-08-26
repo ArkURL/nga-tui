@@ -66,7 +66,7 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// Save 保存配置（0600 权限，仅本用户可读）。
+// Save 原子写配置：先写临时文件再 rename，避免进程被杀时留下损坏/空的配置。
 func Save(cfg *Config) error {
 	saveMu.Lock()
 	defer saveMu.Unlock()
@@ -78,5 +78,9 @@ func Save(cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(p, data, 0o600)
+	tmp := p + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, p)
 }
