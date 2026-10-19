@@ -348,9 +348,9 @@ func (a *App) footer() string {
 		} else {
 			hints = append(hints, "Enter 看帖")
 		}
-		hints = append(hints, "f 收藏", "n/p 翻页", "/ 搜帖", "e 排序", "q 返回")
+		hints = append(hints, "f 收藏", "o 浏览器", "n/p 翻页", "/ 搜帖", "e 排序", "q 返回")
 	} else if a.screen == ScreenReader {
-		hints = append(hints, "j/k 按楼跳转", "Shift+J/K 细调", "n/p 翻页", "q 返回")
+		hints = append(hints, "j/k 按楼跳转", "Shift+J/K 细调", "o 浏览器", "n/p 翻页", "q 返回")
 	}
 	hints = append(hints, "? 帮助")
 	right.WriteString(dimStyle.Render(strings.Join(hints, "  ")))

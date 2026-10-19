@@ -138,6 +138,10 @@ func (m readerModel) handleKey(msg tea.KeyMsg) (readerModel, tea.Cmd) {
 	switch {
 	case keyMatches(msg, km.Back):
 		return m, navCmd(ScreenThreadList, nil)
+	case keyMatches(msg, km.OpenBrowser):
+		if m.st != nil && m.st.CurrentThread != nil {
+			return m, openThreadCmd(m.st.CurrentThread.TID, m.st.ReadPage)
+		}
 	case keyMatches(msg, km.Up):
 		// k/↑：跳到上一楼头部
 		m.vp.SetYOffset(m.prevFloorLine())

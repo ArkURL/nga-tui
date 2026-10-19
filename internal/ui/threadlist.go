@@ -171,6 +171,11 @@ func (m threadListModel) handleKey(msg tea.KeyMsg) (threadListModel, tea.Cmd) {
 			th := m.st.Threads[m.cursor]
 			return m, navCmd(ScreenReader, th)
 		}
+	case keyMatches(msg, km.OpenBrowser):
+		// 子版面视图没有帖子可选；帖子视图打开光标所在帖
+		if m.state == listReady && !m.showSubs && m.cursor < len(m.st.Threads) {
+			return m, openThreadCmd(m.st.Threads[m.cursor].TID, 1)
+		}
 	case keyMatches(msg, km.ToggleSubs):
 		// 子版面/帖子 视图切换（搜索时无子版面）
 		if m.state == listReady && m.st != nil && m.st.ListSearchKey == "" && len(m.st.SubForums) > 0 {
