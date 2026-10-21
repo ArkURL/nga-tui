@@ -68,7 +68,7 @@ cmd/verify                 开发辅助 CLI，直接打真实 NGA 接口
 - 所有请求走 `https://bbs.nga.cn` + `__output=11`；UA 必须是移动端 `NGA_WP_JW`，否则触发反爬 error 15。
 - 接口：`/app_api.php?__lib=home&__act=category`（分类树）、`/thread.php`（帖子列表 + 子版面）、`/read.php`（楼层）、`/thread.php?favor=1`（登录探测）。
 - `fixJSON` 是必需环节：NGA 会返回裸数字 key 和字符串内的原始控制字符/孤立反斜杠。任何新解析路径都要先走 `fetchJSON`。
-- `fetchJSON` 对解析失败做 5 次渐进退避重试，但 `*APIError`/`*HTTPError` 是确定性错误不重试。
+- `fetchJSON` 对解析失败做 5 次指数退避重试（1/2/4/8s），但 `*APIError`/`*HTTPError` 是确定性错误不重试。解析失败会把 `body` 长度、`path`、`content-type` 写进 debug.log（空 body 记为「空响应」），排查服务端截断时先看这里。
 - `Client` 内置 200ms 最小请求间隔和 429/5xx 重试。不要绕过 `throttle` 直接发请求。
 - 已登录时会跟随 `Set-Cookie` 轮换 `ngaPassport*` 并回调持久化；空值/删除指令一律忽略，避免误清会话。
 - 错误码 `2048`（"尚未登录"/"必须登录"）由 `isLoginError` 识别，视图会顺手把 `State.LoggedIn` 置 false。
@@ -79,6 +79,7 @@ cmd/verify                 开发辅助 CLI，直接打真实 NGA 接口
 - 配置 `~/.config/nga-tui/config.json`（0600）：cookies + favorites。写入走临时文件 rename，并由包级 mutex 串行化。
 - `ui.persistAll` 有登录态保护：若待写入 cookie 不含 passport 而磁盘上已有，则保留旧 cookie，防止收藏操作或访客实例清掉登录。显式登出才用 `persistAllRaw`。
 - 收藏键为 `BoardRef.Key()`：合集用 `stid`，普通版面用 `fid`。已有收藏时启动直接进入收藏视图。
+- 收藏是**有序切片** `State.Favorites`（不是 map），配置中的顺序即显示顺序；收藏视图用 `Shift+J/K` 调序后立即持久化。增删/查询用 `State.IsFavorite/AddFavorite/RemoveFavorite/MoveFavorite`，不要直接操作切片破坏顺序。
 - 调试日志在 `~/.config/nga-tui/debug.log`；任何涉及登录/session 的改动都应加 `debug.Logf`（只打印 cookie 名，不打印值）。
 
 ### 登录
