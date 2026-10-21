@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -51,11 +50,15 @@ func NewApp(client *api.Client, loggedIn bool, favorites []model.BoardRef) *App 
 		help:   newHelpModel(),
 	}
 	a.state.LoggedIn = loggedIn
-	a.state.Favorites = map[string]model.BoardRef{}
+	// 保留配置中的收藏顺序，重复项只保留第一个
+	seen := map[string]bool{}
 	for _, ref := range favorites {
-		if ref.Key() != "" {
-			a.state.Favorites[ref.Key()] = ref
+		key := ref.Key()
+		if key == "" || seen[key] {
+			continue
 		}
+		seen[key] = true
+		a.state.Favorites = append(a.state.Favorites, ref)
 	}
 	// 已有收藏时，启动首页直接显示收藏版面
 	a.forum.favOnly = len(a.state.Favorites) > 0
@@ -91,7 +94,7 @@ func (a *App) logout() {
 // persistAll 把当前 cookie 与收藏写入配置文件（登录态保护）。
 // 若传入的 cookie 不含有效 passport，而配置里已有登录 cookie，则保留旧的，
 // 防止收藏等操作（或另一个访客实例）意外清掉登录。
-func persistAll(cookies map[string]string, favs map[string]model.BoardRef) {
+func persistAll(cookies map[string]string, favs []model.BoardRef) {
 	if !hasPassport(cookies) {
 		if prev, err := config.Load(); err == nil && hasPassport(prev.Cookies) {
 			cookies = prev.Cookies
@@ -101,9 +104,9 @@ func persistAll(cookies map[string]string, favs map[string]model.BoardRef) {
 }
 
 // persistAllRaw 直接写入配置（登出等明确要清空 cookie 时用）。
-func persistAllRaw(cookies map[string]string, favs map[string]model.BoardRef) {
+func persistAllRaw(cookies map[string]string, favs []model.BoardRef) {
 	debug.Logf("持久化配置: cookie名=%v 收藏数=%d", cookieNames(cookies), len(favs))
-	cfg := &config.Config{Cookies: cookies, Favorites: favoriteList(favs)}
+	cfg := &config.Config{Cookies: cookies, Favorites: favs}
 	_ = config.Save(cfg)
 }
 
@@ -118,16 +121,6 @@ func cookieNames(cookies map[string]string) []string {
 	for k := range cookies {
 		out = append(out, k)
 	}
-	return out
-}
-
-// favoriteList 把收藏 map 转为有序列表（按 Key 排序，保证确定性）。
-func favoriteList(favs map[string]model.BoardRef) []model.BoardRef {
-	out := make([]model.BoardRef, 0, len(favs))
-	for _, ref := range favs {
-		out = append(out, ref)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Key() < out[j].Key() })
 	return out
 }
 
@@ -338,6 +331,9 @@ func (a *App) footer() string {
 	hints := []string{}
 	if a.screen == ScreenForum {
 		hints = append(hints, "Enter 进版面", "f 收藏", "o 直达", "Tab 收藏/全部", "/ 搜版面", "L 登录", "q 退出")
+		if a.forum.favOnly {
+			hints = append(hints, "Shift+J/K 调序")
+		}
 	} else if a.screen == ScreenThreadList {
 		if a.state.ListSearchKey == "" && len(a.state.SubForums) > 0 {
 			if a.list.showSubs {

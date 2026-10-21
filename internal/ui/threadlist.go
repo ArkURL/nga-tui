@@ -211,10 +211,10 @@ func (m threadListModel) handleKey(msg tea.KeyMsg) (threadListModel, tea.Cmd) {
 			}
 			if ref.Key() != "" {
 				added := false
-				if _, ok := m.st.Favorites[ref.Key()]; ok {
-					delete(m.st.Favorites, ref.Key())
+				if m.st.IsFavorite(ref.Key()) {
+					m.st.RemoveFavorite(ref.Key())
 				} else {
-					m.st.Favorites[ref.Key()] = ref
+					m.st.AddFavorite(ref)
 					added = true
 				}
 				persistAll(m.st.Client.Cookies(), m.st.Favorites)

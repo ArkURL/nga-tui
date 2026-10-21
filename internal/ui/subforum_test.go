@@ -139,8 +139,12 @@ func TestListFavoriteSubforum(t *testing.T) {
 	app.list.cursor = 0
 
 	_, _ = app.list.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
-	ref, ok := app.state.Favorites["29182350"]
-	if !ok || ref.STID != "29182350" || ref.Name != "评测/安利" {
+	i := app.state.favoriteIndex("29182350")
+	if i < 0 {
+		t.Fatal("应收藏合集 29182350")
+	}
+	ref := app.state.Favorites[i]
+	if ref.STID != "29182350" || ref.Name != "评测/安利" {
 		t.Fatalf("应收藏合集，得到 %+v", ref)
 	}
 }
@@ -260,8 +264,12 @@ func TestGotoBoardFavoriteUsesRealName(t *testing.T) {
 		Threads:   []model.Thread{{TID: 1}},
 	}, err: nil})
 	_, _ = app.list.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
-	ref, ok := app.state.Favorites["47206901"]
-	if !ok || ref.STID != "47206901" || ref.Name != "[股市]技术分析" {
+	i := app.state.favoriteIndex("47206901")
+	if i < 0 {
+		t.Fatal("应收藏合集 47206901")
+	}
+	ref := app.state.Favorites[i]
+	if ref.STID != "47206901" || ref.Name != "[股市]技术分析" {
 		t.Fatalf("收藏应使用回填后的真实名称，得到 %+v", ref)
 	}
 }

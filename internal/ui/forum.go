@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -139,8 +138,8 @@ func (m *forumModel) rebuild() {
 		return
 	}
 	if m.favOnly {
-		m.items = buildFavItems(m.st.Favorites)
 		m.backfillFavNames()
+		m.items = buildFavItems(m.st.Favorites)
 	} else {
 		m.items = buildForumItems(m.st.Categories)
 	}
@@ -182,10 +181,10 @@ func (m forumModel) handleKey(msg tea.KeyMsg) (forumModel, tea.Cmd) {
 			f := m.items[m.selIdx[m.cursor]].forum
 			k := f.BoardKey()
 			added := false
-			if _, ok := m.st.Favorites[k]; ok {
-				delete(m.st.Favorites, k)
+			if m.st.IsFavorite(k) {
+				m.st.RemoveFavorite(k)
 			} else {
-				m.st.Favorites[k] = model.BoardRef{FID: f.FID, STID: f.STID, Name: f.Name}
+				m.st.AddFavorite(model.BoardRef{FID: f.FID, STID: f.STID, Name: f.Name})
 				added = true
 			}
 			persistAll(m.st.Client.Cookies(), m.st.Favorites)
@@ -199,6 +198,10 @@ func (m forumModel) handleKey(msg tea.KeyMsg) (forumModel, tea.Cmd) {
 			}
 			return m, statusCmd("已取消收藏「" + name + "」")
 		}
+	case m.favOnly && keyMatches(msg, km.FavUp):
+		return m.moveFavorite(-1)
+	case m.favOnly && keyMatches(msg, km.FavDown):
+		return m.moveFavorite(1)
 	case keyMatches(msg, km.ToggleForum):
 		if m.state == forumReady {
 			m.favOnly = !m.favOnly
@@ -280,10 +283,8 @@ func (m forumModel) renderList() string {
 				name += " [合集]"
 			}
 			mark := "  "
-			if m.st != nil {
-				if _, ok := m.st.Favorites[it.forum.BoardKey()]; ok {
-					mark = "★ "
-				}
+			if m.st != nil && m.st.IsFavorite(it.forum.BoardKey()) {
+				mark = "★ "
 			}
 			name = mark + name
 			info := ""
@@ -323,8 +324,8 @@ func buildForumItems(cats []model.Category) []forumItem {
 	return items
 }
 
-// buildFavItems 直接渲染收藏列表（不再扫描分类树，因此子版面收藏也能显示）。
-func buildFavItems(favs map[string]model.BoardRef) []forumItem {
+// buildFavItems 按收藏顺序直接渲染列表（不再扫描分类树，因此子版面收藏也能显示）。
+func buildFavItems(favs []model.BoardRef) []forumItem {
 	var items []forumItem
 	for _, ref := range favs {
 		items = append(items, forumItem{
@@ -339,7 +340,8 @@ func buildFavItems(favs map[string]model.BoardRef) []forumItem {
 	return items
 }
 
-// backfillFavNames 用分类树回填旧配置收藏（只有 fid、无 Name）的名称，查不到退化显示 Key。
+// backfillFavNames 用分类树回填旧配置收藏（只有 fid、无 Name）的名称，
+// 查不到退化显示 Key。直接写回 State.Favorites，保证持久化后名称不丢。
 func (m *forumModel) backfillFavNames() {
 	if m.st == nil {
 		return
@@ -352,20 +354,42 @@ func (m *forumModel) backfillFavNames() {
 			}
 		}
 	}
-	for i := range m.items {
-		f := &m.items[i].forum
-		if f.Name == "" {
-			if n, ok := nameByKey[f.BoardKey()]; ok {
-				f.Name = n
-			} else {
-				f.Name = f.BoardKey()
-			}
+	for i := range m.st.Favorites {
+		ref := &m.st.Favorites[i]
+		if ref.Name != "" {
+			continue
+		}
+		if n, ok := nameByKey[ref.Key()]; ok {
+			ref.Name = n
+		} else {
+			ref.Name = ref.Key()
 		}
 	}
-	// 名称回填后重排序
-	sort.Slice(m.items, func(i, j int) bool {
-		return m.items[i].forum.Name < m.items[j].forum.Name
-	})
+}
+
+// moveFavorite 在收藏视图内上移/下移当前版面，并持久化新顺序。
+func (m *forumModel) moveFavorite(delta int) (forumModel, tea.Cmd) {
+	if m.state != forumReady || m.st == nil || len(m.selIdx) == 0 {
+		return *m, nil
+	}
+	ref := m.items[m.selIdx[m.cursor]].forum
+	key := ref.BoardKey()
+	if !m.st.MoveFavorite(key, delta) {
+		return *m, nil
+	}
+	newCursor := m.cursor + delta
+	m.rebuild()
+	m.cursor = newCursor
+	m.syncViewport()
+	persistAll(m.st.Client.Cookies(), m.st.Favorites)
+	name := ref.Name
+	if name == "" {
+		name = key
+	}
+	if delta < 0 {
+		return *m, statusCmd("已上移「" + name + "」")
+	}
+	return *m, statusCmd("已下移「" + name + "」")
 }
 
 func selectableIndices(items []forumItem) []int {

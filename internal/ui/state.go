@@ -42,8 +42,9 @@ type State struct {
 	LoggedIn bool
 
 	Categories []model.Category
-	// Favorites 收藏的版面（键为 BoardRef.Key()，即 stid 或 fid）。
-	Favorites map[string]model.BoardRef
+	// Favorites 收藏的版面，按用户自定义顺序排列。
+	// 用切片而非 map 是为了保留手动排序（Shift+J/K 调序）。
+	Favorites []model.BoardRef
 
 	// 帖子列表状态
 	CurrentForum *model.Forum
@@ -73,8 +74,63 @@ func NewState(client *api.Client) *State {
 	return &State{
 		Client:      client,
 		ListOrderBy: "lastpostdesc",
-		Favorites:   map[string]model.BoardRef{},
 	}
+}
+
+// IsFavorite 判断版面是否已收藏。
+func (s *State) IsFavorite(key string) bool {
+	return s.favoriteIndex(key) >= 0
+}
+
+// favoriteIndex 返回收藏在列表中的位置，不存在返回 -1。
+func (s *State) favoriteIndex(key string) int {
+	if key == "" {
+		return -1
+	}
+	for i, ref := range s.Favorites {
+		if ref.Key() == key {
+			return i
+		}
+	}
+	return -1
+}
+
+// AddFavorite 追加收藏；已存在时更新内容但保持原位置。
+func (s *State) AddFavorite(ref model.BoardRef) {
+	key := ref.Key()
+	if key == "" {
+		return
+	}
+	if i := s.favoriteIndex(key); i >= 0 {
+		s.Favorites[i] = ref
+		return
+	}
+	s.Favorites = append(s.Favorites, ref)
+}
+
+// RemoveFavorite 删除收藏，返回是否删除。
+func (s *State) RemoveFavorite(key string) bool {
+	i := s.favoriteIndex(key)
+	if i < 0 {
+		return false
+	}
+	s.Favorites = append(s.Favorites[:i], s.Favorites[i+1:]...)
+	return true
+}
+
+// MoveFavorite 把 key 对应的收藏移动 delta 格（-1 上移 / 1 下移），
+// 越界时不动并返回 false。
+func (s *State) MoveFavorite(key string, delta int) bool {
+	i := s.favoriteIndex(key)
+	if i < 0 {
+		return false
+	}
+	j := i + delta
+	if j < 0 || j >= len(s.Favorites) {
+		return false
+	}
+	s.Favorites[i], s.Favorites[j] = s.Favorites[j], s.Favorites[i]
+	return true
 }
 
 // NavigateMsg 是视图间导航请求，由根 App 处理。

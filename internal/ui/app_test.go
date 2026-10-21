@@ -265,7 +265,7 @@ func TestSessionPersistRoundTrip(t *testing.T) {
 		"_ga":            "GA1.1",
 	}
 	client.SetCookies(cookies)
-	persistAll(client.Cookies(), map[string]model.BoardRef{"7": {FID: "7", Name: "版7"}})
+	persistAll(client.Cookies(), []model.BoardRef{{FID: "7", Name: "版7"}})
 
 	// 模拟重启：从配置读取
 	cfg, err := config.Load()
@@ -440,10 +440,10 @@ func TestPersistAllPreservesLogin(t *testing.T) {
 	// 先写入带登录 cookie 的配置
 	client := api.NewClient()
 	client.SetCookies(map[string]string{"ngaPassportUid": "1", "ngaPassportCid": "token"})
-	persistAll(client.Cookies(), map[string]model.BoardRef{})
+	persistAll(client.Cookies(), nil)
 
 	// 模拟访客实例（空 cookie）收藏 → 不应覆盖已保存的登录 cookie
-	persistAll(map[string]string{}, map[string]model.BoardRef{"7": {FID: "7", Name: "版7"}})
+	persistAll(map[string]string{}, []model.BoardRef{{FID: "7", Name: "版7"}})
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -462,10 +462,10 @@ func TestLogoutStillClearsLogin(t *testing.T) {
 
 	client := api.NewClient()
 	client.SetCookies(map[string]string{"ngaPassportUid": "1", "ngaPassportCid": "token"})
-	persistAll(client.Cookies(), map[string]model.BoardRef{})
+	persistAll(client.Cookies(), nil)
 
 	// 登出仍应清空 cookie
-	persistAllRaw(map[string]string{}, map[string]model.BoardRef{})
+	persistAllRaw(map[string]string{}, nil)
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatal(err)

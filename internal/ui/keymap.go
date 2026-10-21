@@ -21,6 +21,8 @@ type keyMap struct {
 	Sort        key.Binding
 	ToggleSubs  key.Binding
 	Favorite    key.Binding
+	FavUp       key.Binding
+	FavDown     key.Binding
 	ToggleForum key.Binding
 	Login       key.Binding
 	Help        key.Binding
@@ -46,6 +48,8 @@ func newKeyMap() keyMap {
 		Sort:        key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "切换排序")),
 		ToggleSubs:  key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "子版面/帖子 视图切换")),
 		Favorite:    key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "收藏/取消收藏")),
+		FavUp:       key.NewBinding(key.WithKeys("K"), key.WithHelp("Shift+K", "收藏版面上移")),
+		FavDown:     key.NewBinding(key.WithKeys("J"), key.WithHelp("Shift+J", "收藏版面下移")),
 		ToggleForum: key.NewBinding(key.WithKeys("tab"), key.WithHelp("Tab", "切换 全部/收藏 版面")),
 		Login:       key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "登录/登出")),
 		Help:        key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "帮助")),

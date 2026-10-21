@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/ArkURL/nga-tui/internal/api"
+	"github.com/ArkURL/nga-tui/internal/config"
 	"github.com/ArkURL/nga-tui/internal/model"
 )
 
@@ -90,12 +91,12 @@ func TestForumBackOnEmpty(t *testing.T) {
 }
 
 func TestBuildFavItems(t *testing.T) {
-	favs := map[string]model.BoardRef{"2": {FID: "2", Name: "版面2"}}
+	favs := []model.BoardRef{{FID: "2", Name: "版面2"}}
 	items := buildFavItems(favs)
 	if len(items) != 1 || items[0].forum.FID != "2" {
 		t.Fatalf("收藏列表应为 fid=2，得到 %+v", items)
 	}
-	if len(buildFavItems(map[string]model.BoardRef{})) != 0 {
+	if len(buildFavItems(nil)) != 0 {
 		t.Fatal("无收藏应为空")
 	}
 }
@@ -111,12 +112,12 @@ func TestForumFavoriteToggle(t *testing.T) {
 
 	// f 收藏
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
-	if _, ok := m.st.Favorites["2"]; !ok {
+	if !m.st.IsFavorite("2") {
 		t.Fatal("f 应收藏 fid=2")
 	}
 	// 再按 f 取消收藏
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
-	if _, ok := m.st.Favorites["2"]; ok {
+	if m.st.IsFavorite("2") {
 		t.Fatal("再次 f 应取消收藏 fid=2")
 	}
 }
@@ -126,9 +127,9 @@ func TestForumToggleFilter(t *testing.T) {
 	m.st = NewState(api.NewClient())
 	m.state = forumReady
 	m.st.Categories = sampleCategories()
-	m.st.Favorites = map[string]model.BoardRef{
-		"1": {FID: "1", Name: "版面1"},
-		"3": {FID: "3", Name: "版面3"},
+	m.st.Favorites = []model.BoardRef{
+		{FID: "1", Name: "版面1"},
+		{FID: "3", Name: "版面3"},
 	}
 	m.rebuild()
 	if m.favOnly {
@@ -164,12 +165,12 @@ func TestSearchResultsFavorite(t *testing.T) {
 
 	// 搜索结果中按 f 收藏
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
-	if _, ok := m.st.Favorites["2"]; !ok {
+	if !m.st.IsFavorite("2") {
 		t.Fatal("搜索结果的 f 应收藏 fid=2")
 	}
 	// 再按 f 取消收藏
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
-	if _, ok := m.st.Favorites["2"]; ok {
+	if m.st.IsFavorite("2") {
 		t.Fatal("再次 f 应取消收藏 fid=2")
 	}
 }
@@ -225,5 +226,83 @@ func TestStatusClearSequence(t *testing.T) {
 	_, _ = app.Update(statusClearMsg{seq: app.statusSeq})
 	if app.status != "" {
 		t.Fatalf("匹配清除应清空，得到 %q", app.status)
+	}
+}
+
+func favKeys(favs []model.BoardRef) []string {
+	out := make([]string, len(favs))
+	for i, f := range favs {
+		out[i] = f.Key()
+	}
+	return out
+}
+
+func TestForumFavoriteReorder(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	m := newForumModel()
+	m.st = NewState(api.NewClient())
+	m.state = forumReady
+	m.st.Favorites = []model.BoardRef{
+		{FID: "1", Name: "版面1"},
+		{FID: "2", Name: "版面2"},
+		{FID: "3", Name: "版面3"},
+	}
+	m.favOnly = true
+	m.rebuild()
+
+	// 光标在首项，Shift+J 下移
+	m.cursor = 0
+	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
+	if got := favKeys(m.st.Favorites); strings.Join(got, ",") != "2,1,3" {
+		t.Fatalf("Shift+J 后顺序应为 2,1,3，得到 %v", got)
+	}
+	if m.cursor != 1 {
+		t.Fatalf("光标应跟随移动到 1，得到 %d", m.cursor)
+	}
+	if cmd == nil {
+		t.Fatal("调整顺序后应有状态提示")
+	}
+
+	// 顺序应写入配置
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Favorites) != 3 || cfg.Favorites[0].Key() != "2" {
+		t.Fatalf("收藏顺序未持久化: %+v", cfg.Favorites)
+	}
+
+	// 再按 Shift+K 上移回原位
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'K'}})
+	if got := favKeys(m.st.Favorites); strings.Join(got, ",") != "1,2,3" {
+		t.Fatalf("Shift+K 后顺序应为 1,2,3，得到 %v", got)
+	}
+	if m.cursor != 0 {
+		t.Fatalf("光标应跟随移动到 0，得到 %d", m.cursor)
+	}
+
+	// 顶部继续上移应无变化
+	m, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'K'}})
+	if cmd != nil {
+		t.Fatal("越界调整不应有提示")
+	}
+	if got := favKeys(m.st.Favorites); strings.Join(got, ",") != "1,2,3" {
+		t.Fatalf("越界调整不应改变顺序，得到 %v", got)
+	}
+}
+
+func TestForumReorderOnlyInFavView(t *testing.T) {
+	m := newForumModel()
+	m.st = NewState(api.NewClient())
+	m.state = forumReady
+	m.st.Categories = sampleCategories()
+	m.st.Favorites = []model.BoardRef{{FID: "1", Name: "版面1"}, {FID: "2", Name: "版面2"}}
+	m.items = buildForumItems(sampleCategories())
+	m.selIdx = selectableIndices(m.items)
+	m.cursor = 0
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
+	if got := favKeys(m.st.Favorites); strings.Join(got, ",") != "1,2" {
+		t.Fatalf("全部版面视图不应调整收藏顺序，得到 %v", got)
 	}
 }
