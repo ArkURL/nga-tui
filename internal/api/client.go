@@ -39,6 +39,9 @@ type Client struct {
 	minInterval time.Duration
 	lastReq     time.Time
 	rateMu      sync.Mutex
+
+	// retryBase 是解析失败重试的首次退避时长，之后逐次翻倍。
+	retryBase time.Duration
 }
 
 // NewClient 创建默认客户端。
@@ -49,6 +52,7 @@ func NewClient() *Client {
 		hc:          &http.Client{Timeout: 20 * time.Second},
 		cookies:     map[string]string{},
 		minInterval: 200 * time.Millisecond,
+		retryBase:   time.Second,
 	}
 }
 
@@ -140,12 +144,13 @@ func (c *Client) Get(path string, params url.Values) ([]byte, error) {
 	return body, err
 }
 
-// fetchJSON 获取并解析响应；解析失败（如 NGA 间歇性返回被截断的响应）时退避重试。
+// fetchJSON 获取并解析响应；解析失败（如 NGA 间歇性返回空/截断的响应）时指数退避重试。
 // APIError/HTTPError 等确定性错误不重试。
 func (c *Client) fetchJSON(path string, params url.Values, parse func(body []byte) error) error {
 	var lastErr error
+	delay := c.retryBase
 	for attempt := 0; attempt < 5; attempt++ {
-		body, err := c.Get(path, params)
+		body, hdr, err := c.doHost("GET", c.base, path, params, nil)
 		if err != nil {
 			return err
 		}
@@ -156,10 +161,21 @@ func (c *Client) fetchJSON(path string, params url.Values, parse func(body []byt
 			if _, ok := err.(*HTTPError); ok {
 				return err
 			}
-			debug.Logf("解析响应失败（第 %d/5 次）: %v", attempt+1, err)
+			// 记录响应规模与类型，便于区分"空响应"和"被截断"
+			if len(body) == 0 {
+				debug.Logf("空响应（第 %d/5 次，path=%s, content-type=%q）: %v",
+					attempt+1, path, hdr.Get("Content-Type"), err)
+			} else {
+				debug.Logf("解析响应失败（第 %d/5 次，path=%s, body=%d 字节, content-type=%q）: %v",
+					attempt+1, path, len(body), hdr.Get("Content-Type"), err)
+			}
 			lastErr = err
-			// 渐进退避，给 NGA 服务端留出恢复时间
-			time.Sleep(time.Duration(attempt+1) * 400 * time.Millisecond)
+			if attempt == 4 {
+				break
+			}
+			// 指数退避（1s/2s/4s/8s），给 NGA 服务端和 CDN 缓存留出恢复时间
+			time.Sleep(delay)
+			delay *= 2
 			continue
 		}
 		return nil

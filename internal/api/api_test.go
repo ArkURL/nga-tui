@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ArkURL/nga-tui/internal/model"
 )
@@ -300,5 +303,64 @@ func TestGetThreadsBoardName(t *testing.T) {
 	}
 	if res.BoardName != "艾泽拉斯议事厅" {
 		t.Fatalf("普通版面应取 name，得到 %q", res.BoardName)
+	}
+}
+
+func TestFetchJSONRetriesEmptyResponse(t *testing.T) {
+	var calls int
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls < 3 {
+			// 模拟 NGA 偶发的 200 + 空 body
+			return
+		}
+		w.Write([]byte(`{"data":{"__PAGE":1,"__ROWS":0,"__T":[],"__F":{}}}`))
+	}))
+	defer ts.Close()
+
+	c := NewClient()
+	c.base = ts.URL
+	c.minInterval = 0
+	c.retryBase = time.Millisecond
+
+	if _, err := c.GetThreads("7", "", 1, "lastpostdesc", ""); err != nil {
+		t.Fatalf("空响应后重试应成功: %v", err)
+	}
+	if calls != 3 {
+		t.Fatalf("期望请求 3 次，实际 %d 次", calls)
+	}
+}
+
+func TestFetchJSONEmptyResponseLogAndGiveUp(t *testing.T) {
+	var calls int
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		// 持续返回空 body
+	}))
+	defer ts.Close()
+
+	c := NewClient()
+	c.base = ts.URL
+	c.minInterval = 0
+	c.retryBase = time.Millisecond
+
+	_, err := c.GetThreads("7", "", 1, "lastpostdesc", "")
+	if err == nil {
+		t.Fatal("持续空响应应返回错误")
+	}
+	if !strings.Contains(err.Error(), "多次不完整") {
+		t.Fatalf("错误信息不对: %v", err)
+	}
+	if calls != 5 {
+		t.Fatalf("期望重试 5 次，实际 %d 次", calls)
+	}
+
+	logPath := filepath.Join(os.Getenv("HOME"), ".config", "nga-tui", "debug.log")
+	data, readErr := os.ReadFile(logPath)
+	if readErr != nil {
+		t.Fatalf("读取调试日志失败: %v", readErr)
+	}
+	if !strings.Contains(string(data), "空响应") {
+		t.Fatalf("调试日志应记录空响应，实际内容: %s", data)
 	}
 }
