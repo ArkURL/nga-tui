@@ -102,7 +102,14 @@ func popUntil(stack *[]*Node, tag string) *Node {
 	return nil
 }
 
-var smileRe = regexp.MustCompile(`s:[^\s\[\]]+`)
+var (
+	// smileTagRe 匹配带方括号的表情标记，如 [s:ac:哭笑]。
+	smileTagRe = regexp.MustCompile(`\[s:[^\]]*\]`)
+	// smileRawRe 匹配裸表情标记，如 s:ac:哭笑。
+	// 前面的字符不能是 ASCII 字母/数字，否则会把 https:// 里的 "s://..."
+	// 当成表情删掉，链接只剩 "http"。
+	smileRawRe = regexp.MustCompile(`(^|[^\w])s:[^\s\[\]]+`)
+)
 
 // quoteBar 是引用块的左侧竖线。
 const quoteBar = "│ "
@@ -199,7 +206,8 @@ func renderList(n *Node, width int) string {
 
 // escapeText 清理文本：剔除表情标签、转换 <br/>。
 func escapeText(s string) string {
-	s = smileRe.ReplaceAllString(s, "")
+	s = smileTagRe.ReplaceAllString(s, "")
+	s = smileRawRe.ReplaceAllString(s, "$1")
 	s = strings.ReplaceAll(s, "<br/>", "\n")
 	s = strings.ReplaceAll(s, "<br>", "\n")
 	s = strings.ReplaceAll(s, "\r", "")

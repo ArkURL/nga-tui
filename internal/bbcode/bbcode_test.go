@@ -90,3 +90,26 @@ func TestQuoteWrapKeepsBar(t *testing.T) {
 		t.Fatalf("长引用应折行且续行带竖线，实际带竖线行数=%d: %q", hasBar, out)
 	}
 }
+
+func TestRenderURLAsVisibleText(t *testing.T) {
+	cases := []string{
+		"[url]https://v.douyin.com/9B-Rm96-GKI/[/url]",
+		"看这个 https://v.douyin.com/9B-Rm96-GKI/",
+	}
+	for _, in := range cases {
+		out := Render(in, 200)
+		if !strings.Contains(out, "https://v.douyin.com/9B-Rm96-GKI/") {
+			t.Fatalf("URL 被截断: 输入 %q，输出 %q", in, out)
+		}
+	}
+}
+
+func TestRenderSmileStillStripped(t *testing.T) {
+	out := Render("笑[s:ac:哭笑]好 s:ac:goodjob 结束", 80)
+	if strings.Contains(out, "s:") || strings.Contains(out, "[]") {
+		t.Fatalf("表情标记未剔除干净: %q", out)
+	}
+	if !strings.Contains(out, "笑") || !strings.Contains(out, "好") || !strings.Contains(out, "结束") {
+		t.Fatalf("表情周边文本丢失: %q", out)
+	}
+}
