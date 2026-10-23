@@ -40,6 +40,14 @@ func Parse(src string) *Node {
 				continue
 			}
 			if open, attr, end := matchOpenTag(src, i); open != "" {
+				// NGA 表情 [s:xxx] 是自闭合的，没有 [/s:xxx]。
+				// 当成普通文本交给 escapeText 清理，避免它一直挂在标签栈上，
+				// 导致后面的 [/quote] 错位、把层主回复也吞进引用块。
+				if strings.HasPrefix(open, "s:") {
+					cur.Text = append(cur.Text, &Node{Content: src[i:end]})
+					i = end
+					continue
+				}
 				child := &Node{Tag: open, Attr: attr}
 				cur.Text = append(cur.Text, child)
 				stack = append(stack, cur)
@@ -90,12 +98,19 @@ func matchCloseTag(src string, i int) string {
 	return strings.ToLower(strings.TrimSpace(src[i+2 : i+endBracket]))
 }
 
-// popUntil 从栈顶向下找匹配标签，找不到返回 nil。
+// popUntil 处理错位闭合：从栈顶向下找到被闭合的标签，
+// 返回它的父节点（即闭合后 cur 应该回到的位置），找不到返回 nil。
+// 注意不能返回被闭合的标签本身，否则闭合标签之后的内容会继续挂在它下面。
 func popUntil(stack *[]*Node, tag string) *Node {
 	for len(*stack) > 0 {
-		parent := (*stack)[len(*stack)-1]
+		n := (*stack)[len(*stack)-1]
 		*stack = (*stack)[:len(*stack)-1]
-		if parent.Tag == tag {
+		if n.Tag == tag {
+			if len(*stack) == 0 {
+				return nil
+			}
+			parent := (*stack)[len(*stack)-1]
+			*stack = (*stack)[:len(*stack)-1]
 			return parent
 		}
 	}
@@ -206,10 +221,37 @@ func renderList(n *Node, width int) string {
 	return sb.String()
 }
 
-// escapeText 清理文本：剔除表情标签、转换 <br/>。
+// smileLabel 把 NGA 表情代码转成文字描述，如 "s:ac:哭笑" -> "哭笑"。
+func smileLabel(code string) string {
+	code = strings.TrimPrefix(code, "s:")
+	if i := strings.LastIndexByte(code, ':'); i >= 0 {
+		code = code[i+1:]
+	}
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return "表情"
+	}
+	return code
+}
+
+// renderSmile 把表情渲染为文字占位，如 〔哭笑〕。
+func renderSmile(code string) string {
+	return "〔" + smileLabel(code) + "〕"
+}
+
+// escapeText 处理文本：表情转为文字占位、转换 <br/>。
 func escapeText(s string) string {
-	s = smileTagRe.ReplaceAllString(s, "")
-	s = smileRawRe.ReplaceAllString(s, "$1")
+	s = smileTagRe.ReplaceAllStringFunc(s, func(tag string) string {
+		code := strings.TrimSuffix(strings.TrimPrefix(tag, "[s:"), "]")
+		return renderSmile(code)
+	})
+	s = smileRawRe.ReplaceAllStringFunc(s, func(tok string) string {
+		// 匹配里带了表情前的一个字符（避免误伤 https:），原样保留
+		if i := strings.Index(tok, "s:"); i >= 0 {
+			return tok[:i] + renderSmile(tok[i:])
+		}
+		return tok
+	})
 	s = strings.ReplaceAll(s, "<br/>", "\n")
 	s = strings.ReplaceAll(s, "<br>", "\n")
 	s = strings.ReplaceAll(s, "\r", "")

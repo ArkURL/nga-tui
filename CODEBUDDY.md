@@ -42,6 +42,7 @@ main.go                    读配置、恢复 cookie、CheckLogin、启动 tea.P
     └── help.go            帮助页
 internal/api               NGA 数据层：client / category / thread / read / login / fixup
 internal/bbcode            BBCode → ANSI（手写解析树 + lipgloss 样式 + CJK 宽度换行）
+                           NGA 表情 [s:xxx] 是自闭合的，解析时按文本处理并渲染为 〔xxx〕
 internal/browser           Chrome DevTools Protocol 启动独立 Chrome 并抓 passport cookie
 internal/model             领域模型，均为 NGA 脏 JSON 的容错反序列化
 internal/config            ~/.config/nga-tui/config.json 原子读写

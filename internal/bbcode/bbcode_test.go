@@ -14,10 +14,13 @@ func displayWidth(s string) int { return ansi.StringWidthWc(s) }
 func TestRenderPlain(t *testing.T) {
 	out := Render("你好，世界 [s:ac:黑枪]", 40)
 	if strings.Contains(out, "[s:") {
-		t.Fatalf("表情标签未剔除: %q", out)
+		t.Fatalf("表情标签未转换: %q", out)
 	}
 	if !strings.Contains(out, "你好") {
 		t.Fatalf("文本丢失: %q", out)
+	}
+	if !strings.Contains(out, "〔黑枪〕") {
+		t.Fatalf("表情未渲染为文字描述: %q", out)
 	}
 }
 
@@ -106,10 +109,15 @@ func TestRenderURLAsVisibleText(t *testing.T) {
 	}
 }
 
-func TestRenderSmileStillStripped(t *testing.T) {
-	out := Render("笑[s:ac:哭笑]好 s:ac:goodjob 结束", 80)
-	if strings.Contains(out, "s:") || strings.Contains(out, "[]") {
-		t.Fatalf("表情标记未剔除干净: %q", out)
+func TestRenderSmileAsLabel(t *testing.T) {
+	out := Render("笑[s:ac:哭笑]好 s:ac:goodjob 结束 [s:a2:jojo立2]", 80)
+	if strings.Contains(out, "s:") {
+		t.Fatalf("表情代码未转换: %q", out)
+	}
+	for _, want := range []string{"〔哭笑〕", "〔goodjob〕", "〔jojo立2〕"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("缺少表情描述 %q: %q", want, out)
+		}
 	}
 	if !strings.Contains(out, "笑") || !strings.Contains(out, "好") || !strings.Contains(out, "结束") {
 		t.Fatalf("表情周边文本丢失: %q", out)
@@ -157,5 +165,30 @@ func TestQuoteKeepsBarAndWidth(t *testing.T) {
 	}
 	if !strings.Contains(out, "层主回复") {
 		t.Fatalf("回复内容丢失: %q", out)
+	}
+}
+
+func TestQuoteEndsAfterSmileTag(t *testing.T) {
+	out := Render("[quote]引用内容[s:ac:哭笑][/quote]<br/>层主回复内容", 80)
+	if !strings.Contains(out, "│") {
+		t.Fatalf("引用竖线丢失: %q", out)
+	}
+	for _, ln := range strings.Split(out, "\n") {
+		if strings.Contains(ln, "层主回复") && strings.Contains(ln, "│") {
+			t.Fatalf("回复被并入引用块: %q", out)
+		}
+	}
+	if !strings.Contains(out, "层主回复内容") {
+		t.Fatalf("回复内容丢失: %q", out)
+	}
+}
+
+func TestMismatchedCloseDoesNotSwallowFollowingText(t *testing.T) {
+	// 未知标签未闭合时，[/quote] 应按错位闭合处理，之后的内容回到引用外
+	out := Render("[quote]引用内容[unknown][/quote]<br/>层主回复内容", 80)
+	for _, ln := range strings.Split(out, "\n") {
+		if strings.Contains(ln, "层主回复") && strings.Contains(ln, "│") {
+			t.Fatalf("错位闭合后回复仍被并入引用块: %q", out)
+		}
 	}
 }
