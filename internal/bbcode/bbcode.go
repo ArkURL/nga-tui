@@ -172,11 +172,13 @@ func renderQuote(inner string, width int) string {
 	if inner == "" {
 		return ""
 	}
+	// 逐行渲染：对整段多行字符串调用 lipgloss 会把每行补齐到最长行宽，
+	// 导致引用块被撑宽后再被 wrapFinal 二次折行，续行还会丢掉竖线。
 	lines := strings.Split(inner, "\n")
 	for i := range lines {
-		lines[i] = quoteBar + lines[i]
+		lines[i] = dim.Render(quoteBar + lines[i])
 	}
-	return "\n" + dim.Render(strings.Join(lines, "\n")) + "\n"
+	return "\n" + strings.Join(lines, "\n") + "\n"
 }
 
 func renderURL(n *Node, inner string) string {
@@ -229,23 +231,53 @@ func wrapFinal(out string, width int) string {
 	return strings.Join(res, "\n")
 }
 
-func wrapLine(ln string, width int) []string {
-	// 提取行首引用竖线前缀
-	var prefix strings.Builder
-	rest := ln
-	for strings.HasPrefix(rest, quoteBar) {
-		prefix.WriteString(quoteBar)
-		rest = rest[len(quoteBar):]
+// takeQuotePrefix 拆出行首的 ANSI 样式和引用竖线，
+// 返回可直接拼在续行前的前缀（保留原有的 dim 样式）。
+func takeQuotePrefix(ln string) (prefix, rest string) {
+	i := 0
+	for i < len(ln) {
+		if ln[i] == 0x1b {
+			i = ansiSeqEnd(ln, i)
+			continue
+		}
+		if strings.HasPrefix(ln[i:], quoteBar) {
+			i += len(quoteBar)
+			return ln[:i], ln[i:]
+		}
+		break
 	}
-	prefixStr := prefix.String()
-	if prefixStr == "" {
+	return "", ln
+}
+
+// ansiSeqEnd 返回从 s[i]（ESC）开始的转义序列结束位置。
+func ansiSeqEnd(s string, i int) int {
+	j := i + 1
+	if j >= len(s) {
+		return j
+	}
+	if s[j] != '[' {
+		return j + 1
+	}
+	j++
+	for j < len(s) && (s[j] < 0x40 || s[j] > 0x7e) {
+		j++
+	}
+	if j < len(s) {
+		j++
+	}
+	return j
+}
+
+func wrapLine(ln string, width int) []string {
+	prefix, rest := takeQuotePrefix(ln)
+	if prefix == "" {
 		return strings.Split(ansi.HardwrapWc(ln, width, true), "\n")
 	}
-	innerWidth := max(width-ansi.StringWidthWc(prefixStr), 10)
+	innerWidth := max(width-ansi.StringWidthWc(prefix), 10)
 	wrapped := ansi.HardwrapWc(rest, innerWidth, true)
 	lines := strings.Split(wrapped, "\n")
 	for i := range lines {
-		lines[i] = prefixStr + lines[i]
+		lines[i] = prefix + lines[i]
 	}
 	return lines
 }

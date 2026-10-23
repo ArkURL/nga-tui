@@ -4,7 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 )
 
 func displayWidth(s string) int { return ansi.StringWidthWc(s) }
@@ -111,5 +113,49 @@ func TestRenderSmileStillStripped(t *testing.T) {
 	}
 	if !strings.Contains(out, "笑") || !strings.Contains(out, "好") || !strings.Contains(out, "结束") {
 		t.Fatalf("表情周边文本丢失: %q", out)
+	}
+}
+
+func TestQuoteKeepsBarAndWidth(t *testing.T) {
+	// 强制彩色输出，否则 lipgloss 不产生 ANSI 前缀，测不到续行竖线问题
+	old := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(old) })
+
+	long := strings.Repeat("这是一段很长的引用内容", 8)
+	src := "[quote][b]Post by 某人[/b]<br/><br/>" + long + "[/quote]<br/><br/>层主回复的具体内容"
+	out := Render(src, 40)
+	lines := strings.Split(out, "\n")
+
+	lastBar := -1
+	for i, ln := range lines {
+		if strings.Contains(ln, "│") {
+			lastBar = i
+		}
+		if w := ansi.StringWidthWc(ln); w > 40 {
+			t.Fatalf("第 %d 行宽 %d 超过 40（引用块不应被补齐撑宽）: %q", i, w, ln)
+		}
+	}
+	if lastBar < 0 {
+		t.Fatal("引用块没有竖线")
+	}
+	// 引用块内的非空行都必须带竖线
+	for i := 0; i <= lastBar; i++ {
+		plain := strings.TrimSpace(ansi.Strip(lines[i]))
+		if plain == "" {
+			continue
+		}
+		if !strings.Contains(lines[i], "│") {
+			t.Fatalf("引用续行丢了竖线: %q", lines[i])
+		}
+	}
+	// 引用之后的回复不应被当成引用
+	for i := lastBar + 1; i < len(lines); i++ {
+		if strings.Contains(lines[i], "│") {
+			t.Fatalf("回复内容不应带引用竖线: %q", lines[i])
+		}
+	}
+	if !strings.Contains(out, "层主回复") {
+		t.Fatalf("回复内容丢失: %q", out)
 	}
 }
